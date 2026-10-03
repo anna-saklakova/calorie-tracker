@@ -33,7 +33,7 @@ To try it on the phone, run `npm run dev -- --host` and open the LAN address in 
 ## Supabase setup (auth + sync)
 
 1. Create a project at supabase.com.
-2. In the **SQL editor**, run `supabase/migrations/0001_user_data.sql`. It creates one `user_data` row per user, protected by row-level security.
+2. In the **SQL editor**, run `supabase/migrations/20261003000000_user_data.sql`. It creates one `user_data` row per user, protected by row-level security.
 3. **Authentication → URL configuration**: set the Site URL to the deployed URL, and add both it and `http://localhost:5173` to the redirect URLs.
 4. **Authentication → Providers**:
    - Email: on by default (magic link).
