@@ -5,6 +5,8 @@ import pkg from './package.json' with { type: 'json' };
 
 export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  // NEXT_PUBLIC_* are the public Supabase settings the Vercel integration adds; nothing secret uses that prefix.
+  envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
   plugins: [
     react(),
     VitePWA({

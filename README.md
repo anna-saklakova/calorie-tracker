@@ -38,7 +38,7 @@ To try it on the phone, run `npm run dev -- --host` and open the LAN address in 
 4. **Authentication → Providers**:
    - Email: on by default (magic link).
    - Google: enable it, then paste the client ID and secret from a Google Cloud OAuth client. That client's authorized redirect URI must be `https://<project>.supabase.co/auth/v1/callback`.
-5. Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (Project Settings → API). Set the same two variables on the host you deploy to.
+5. On Vercel, the Supabase integration adds `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` itself, and the app reads those too. Otherwise, copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (Project Settings → API). Set the same two variables on the host you deploy to.
 
 ### How sync works
 
