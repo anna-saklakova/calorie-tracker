@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F7F4EF}
+input,textarea,button{font:inherit;color:inherit}
+input:focus,textarea:focus{outline:none}
+input::placeholder,textarea::placeholder{color:#A39D94}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield;appearance:textfield;text-align:left}
+a{color:#6B8F71}a:hover{color:#4F7256}
+@keyframes ctPulse{0%{transform:scale(.92);opacity:.55}50%{transform:scale(1);opacity:1}100%{transform:scale(.92);opacity:.55}}
+@keyframes ctSpin{to{transform:rotate(360deg)}}
+@keyframes ctRec{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes ctUp{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+@keyframes ctFade{from{opacity:0}to{opacity:1}}
+*{-webkit-tap-highlight-color:transparent}
+</style>
+</helmet>
+<div style="width:412px;height:915px;position:relative;overflow:hidden;background:#F7F4EF;color:#1F1D1A;font-family:'Manrope',system-ui,sans-serif;font-size:16px;line-height:1.35;display:flex;flex-direction:column;box-sizing:border-box;border-radius:32px;border:1px solid #E6E1D8;user-select:none">
+
+<!-- TODAY -->
+<sc-if value="{{ isToday }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;height:100%;animation:ctFade .25s">
+  <div style="padding:22px 20px 0;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:4px">
+      <button onClick="{{ prevDay }}" style="width:40px;height:40px;border-radius:12px;border:none;background:transparent;display:grid;place-items:center;cursor:pointer"><svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="#1F1D1A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2 2 8l6 6"></path></svg></button>
+      <button onClick="{{ toggleDatePick }}" style="border:none;background:transparent;font-size:17px;font-weight:600;padding:0 6px;cursor:pointer;height:40px">{{ dateLabel }}</button>
+      <button onClick="{{ nextDay }}" style="width:40px;height:40px;border-radius:12px;border:none;background:transparent;display:grid;place-items:center;cursor:pointer"><svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="#1F1D1A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 6 6-6 6"></path></svg></button>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <sc-if value="{{ notToday }}" hint-placeholder-val="{{ false }}"><button onClick="{{ goToday }}" style="height:32px;padding:0 12px;border-radius:999px;border:1px solid #E6E1D8;background:#fff;font-size:13px;font-weight:600;color:#1F1D1A;cursor:pointer">Today</button></sc-if>
+      <button onClick="{{ openSettings }}" aria-label="Settings" style="width:40px;height:40px;border-radius:12px;border:none;background:transparent;display:grid;place-items:center;cursor:pointer"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#807A72" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h12M3 9h12M3 13h12"></path><circle cx="7" cy="5" r="1.6" fill="#F7F4EF"></circle><circle cx="12" cy="9" r="1.6" fill="#F7F4EF"></circle><circle cx="6" cy="13" r="1.6" fill="#F7F4EF"></circle></svg></button>
+    </div>
+  </div>
+  <sc-if value="{{ datePick }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;gap:8px;padding:12px 20px 0;overflow-x:auto">
+      <sc-for list="{{ dateStrip }}" as="d" hint-placeholder-count="0">
+        <button onClick="{{ d.select }}" style="flex:none;height:56px;width:48px;border-radius:14px;border:1px solid {{ d.border }};background:{{ d.bg }};color:{{ d.color }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer"><span style="font-size:11px;font-weight:600;opacity:.7">{{ d.wd }}</span><span style="font-size:16px;font-weight:700">{{ d.num }}</span></button>
+      </sc-for>
+    </div>
+  </sc-if>
+  <div style="flex:1;overflow-y:auto;padding:0 20px 140px">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:26px 0 8px">
+      <div>
+        <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:60px;font-weight:600;letter-spacing:-2px;line-height:1;font-variant-numeric:tabular-nums">{{ totalKcal }}</span><span style="font-size:15px;color:#807A72;font-weight:500">kcal</span></div>
+        <div style="font-size:14px;color:#807A72;margin-top:8px">{{ goalLine }}</div>
+      </div>
+      <sc-if value="{{ hasGoal }}" hint-placeholder-val="{{ true }}">
+        <svg width="84" height="84" viewBox="0 0 84 84" style="transform:rotate(-90deg)"><circle cx="42" cy="42" r="36" fill="none" stroke="#E9E4DB" stroke-width="7"></circle><circle cx="42" cy="42" r="36" fill="none" stroke="{{ ringColor }}" stroke-width="7" stroke-linecap="round" stroke-dasharray="{{ ringDash }}" style="transition:stroke-dasharray .6s"></circle></svg>
+      </sc-if>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px">
+      <div style="background:#fff;border-radius:16px;padding:12px 14px"><div style="font-size:12px;color:#807A72;font-weight:600">Protein</div><div style="font-size:18px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums">{{ totP }} <span style="font-size:12px;color:#807A72;font-weight:500">g</span></div></div>
+      <div style="background:#fff;border-radius:16px;padding:12px 14px"><div style="font-size:12px;color:#807A72;font-weight:600">Fat</div><div style="font-size:18px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums">{{ totF }} <span style="font-size:12px;color:#807A72;font-weight:500">g</span></div></div>
+      <div style="background:#fff;border-radius:16px;padding:12px 14px"><div style="font-size:12px;color:#807A72;font-weight:600">Carbs</div><div style="font-size:18px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums">{{ totC }} <span style="font-size:12px;color:#807A72;font-weight:500">g</span></div></div>
+    </div>
+    <sc-if value="{{ dayEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top:72px;text-align:center;padding:0 24px">
+        <div style="width:56px;height:56px;border-radius:50%;background:#EFEBE4;margin:0 auto 18px"></div>
+        <div style="font-size:18px;font-weight:600">Nothing logged yet</div>
+        <div style="font-size:14px;color:#807A72;margin-top:6px;text-wrap:pretty">Add a meal with a photo and a short note. The numbers will fill in here.</div>
+      </div>
+    </sc-if>
+    <sc-for list="{{ meals }}" as="m" hint-placeholder-count="2">
+      <div style="margin-top:28px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 10px"><span style="font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#807A72">{{ m.type }}</span><span style="font-size:13px;color:#807A72;font-variant-numeric:tabular-nums">{{ m.kcal }} kcal</span></div>
+        <div style="background:#fff;border-radius:20px;overflow:hidden">
+          <sc-for list="{{ m.items }}" as="it" hint-placeholder-count="2">
+            <button onClick="{{ it.open }}" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border:none;border-top:1px solid {{ it.sep }};background:transparent;text-align:left;cursor:pointer" style-active="background:#F7F4EF">
+              <div style="min-width:0"><div style="font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ it.name }}</div><div style="font-size:13px;color:#807A72;margin-top:2px">{{ it.amountLabel }}</div></div>
+              <div style="font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;flex:none">{{ it.kcal }}</div>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+
+<!-- ADD / COMPOSER -->
+<sc-if value="{{ isAdd }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;height:100%;animation:ctUp .3s cubic-bezier(.2,.8,.2,1)">
+  <div style="padding:22px 12px 0;display:flex;align-items:center;justify-content:space-between">
+    <button onClick="{{ goBack }}" style="height:40px;padding:0 10px;border:none;background:transparent;display:flex;align-items:center;gap:6px;font-size:15px;color:#807A72;cursor:pointer"><svg width="8" height="14" viewBox="0 0 10 16" fill="none" stroke="#807A72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2 2 8l6 6"></path></svg>Back</button>
+    <span style="font-size:16px;font-weight:600">Add meal</span>
+    <span style="width:70px"></span>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:12px 20px 24px">
+    <button onClick="{{ toggleDatePick }}" style="border:none;background:transparent;padding:6px 4px;display:flex;align-items:center;gap:6px;font-size:14px;color:#807A72;cursor:pointer">{{ draftDateLabel }}<svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="#807A72" stroke-width="1.5" stroke-linecap="round"><path d="m1 1 4 4 4-4"></path></svg></button>
+    <sc-if value="{{ datePick }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:8px;padding:6px 0 8px;overflow-x:auto">
+        <sc-for list="{{ dateStrip }}" as="d" hint-placeholder-count="0">
+          <button onClick="{{ d.select }}" style="flex:none;height:56px;width:48px;border-radius:14px;border:1px solid {{ d.border }};background:{{ d.bg }};color:{{ d.color }};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer"><span style="font-size:11px;font-weight:600;opacity:.7">{{ d.wd }}</span><span style="font-size:16px;font-weight:700">{{ d.num }}</span></button>
+        </sc-for>
+      </div>
+    </sc-if>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <sc-for list="{{ mealChips }}" as="ch" hint-placeholder-count="4">
+        <button onClick="{{ ch.select }}" style="height:38px;padding:0 15px;border-radius:999px;border:1px solid {{ ch.border }};background:{{ ch.bg }};color:{{ ch.color }};font-size:14px;font-weight:600;cursor:pointer">{{ ch.label }}</button>
+      </sc-for>
+    </div>
+    <div style="margin-top:28px;font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#807A72;padding:0 4px">Photos</div>
+    <div style="display:flex;gap:10px;margin-top:10px;overflow-x:auto;padding-bottom:4px">
+      <button onClick="{{ addPlatePhoto }}" style="flex:none;width:96px;height:96px;border-radius:18px;border:1.5px dashed #CFC8BD;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#1F1D1A;cursor:pointer"><svg width="22" height="20" viewBox="0 0 22 20" fill="none" stroke="#1F1D1A" stroke-width="1.6" stroke-linejoin="round"><path d="M3 6h3l2-3h6l2 3h3v11H3z"></path><circle cx="11" cy="11" r="3.2"></circle></svg><span style="font-size:12px;font-weight:600">Camera</span></button>
+      <button onClick="{{ addLabelPhoto }}" style="flex:none;width:96px;height:96px;border-radius:18px;border:1.5px dashed #CFC8BD;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#1F1D1A;cursor:pointer"><svg width="22" height="20" viewBox="0 0 22 20" fill="none" stroke="#1F1D1A" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="3" width="16" height="14" rx="2"></rect><path d="m3 14 5-5 4 4 3-3 4 4"></path></svg><span style="font-size:12px;font-weight:600">Gallery</span></button>
+      <sc-for list="{{ photos }}" as="ph" hint-placeholder-count="0">
+        <div style="flex:none;width:96px;height:96px;border-radius:18px;position:relative;overflow:hidden;background:repeating-linear-gradient(135deg,{{ ph.c1 }} 0 6px,{{ ph.c2 }} 6px 12px)">
+          <button onClick="{{ ph.toggleKind }}" style="position:absolute;left:8px;bottom:8px;height:22px;padding:0 8px;border-radius:999px;border:none;background:rgba(31,29,26,.78);color:#fff;font-size:11px;font-weight:600;font-family:ui-monospace,Menlo,monospace;cursor:pointer">{{ ph.kindLabel }}</button>
+          <button onClick="{{ ph.remove }}" aria-label="Remove photo" style="position:absolute;right:6px;top:6px;width:24px;height:24px;border-radius:50%;border:none;background:rgba(31,29,26,.78);color:#fff;font-size:14px;line-height:1;display:grid;place-items:center;cursor:pointer">×</button>
+        </div>
+      </sc-for>
+    </div>
+    <div style="font-size:12px;color:#807A72;margin-top:8px;padding:0 4px">Plate, nutrition label, or both. Add as many as you need.</div>
+    <div style="margin-top:24px;font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#807A72;padding:0 4px">Note</div>
+    <div style="margin-top:10px;background:#fff;border-radius:20px;padding:14px 14px 10px;position:relative">
+      <textarea value="{{ draftText }}" onChange="{{ setDraftText }}" rows="4" placeholder="What's on the plate? e.g. about 150 g pasta, the sauce is from the jar in the second photo, broccoli is steamed" style="width:100%;border:none;background:transparent;resize:none;font-size:16px;line-height:1.45;color:#1F1D1A;display:block;box-sizing:border-box"></textarea>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+        <span style="font-size:12px;color:{{ recColor }};display:flex;align-items:center;gap:6px"><sc-if value="{{ recording }}" hint-placeholder-val="{{ false }}"><span style="width:8px;height:8px;border-radius:50%;background:#B4604A;display:inline-block;animation:ctRec 1s infinite"></span></sc-if>{{ recHint }}</span>
+        <button onClick="{{ toggleRecord }}" aria-label="Voice note" style="width:44px;height:44px;border-radius:50%;border:none;background:{{ micBg }};display:grid;place-items:center;cursor:pointer;transition:background .2s"><svg width="16" height="20" viewBox="0 0 16 20" fill="none" stroke="{{ micInk }}" stroke-width="1.6" stroke-linecap="round"><rect x="5" y="1" width="6" height="11" rx="3"></rect><path d="M2 9a6 6 0 0 0 12 0M8 15v4"></path></svg></button>
+      </div>
+    </div>
+    <button onClick="{{ openManual }}" style="margin-top:18px;width:100%;height:52px;border-radius:16px;border:1px solid #E6E1D8;background:transparent;font-size:15px;font-weight:600;color:#1F1D1A;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">Add by hand or from library</button>
+  </div>
+  <div style="padding:12px 20px 24px">
+    <button onClick="{{ recognize }}" disabled="{{ cantRecognize }}" style="width:100%;height:56px;border-radius:18px;border:none;background:{{ recogBg }};color:#fff;font-size:17px;font-weight:600;cursor:pointer;transition:background .2s">Recognize</button>
+  </div>
+</div>
+</sc-if>
+
+<!-- ANALYZING -->
+<sc-if value="{{ isAnalyzing }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;height:100%;align-items:center;justify-content:center;padding:0 40px;text-align:center;animation:ctFade .3s">
+  <div style="position:relative;width:96px;height:96px;display:grid;place-items:center">
+    <div style="position:absolute;inset:0;border-radius:50%;background:#E4ECE4;animation:ctPulse 1.6s ease-in-out infinite"></div>
+    <div style="position:absolute;inset:14px;border-radius:50%;border:3px solid transparent;border-top-color:#6B8F71;animation:ctSpin 1.1s linear infinite"></div>
+  </div>
+  <div style="font-size:20px;font-weight:600;margin-top:32px">Looking at your meal</div>
+  <div style="font-size:15px;color:#807A72;margin-top:8px;min-height:44px;text-wrap:pretty">{{ analyzeStep }}</div>
+  <div style="font-size:13px;color:#A39D94;margin-top:28px;text-wrap:pretty">{{ analyzeContext }}</div>
+  <button onClick="{{ cancelAnalyze }}" style="margin-top:40px;height:44px;padding:0 20px;border-radius:999px;border:none;background:transparent;font-size:15px;color:#807A72;cursor:pointer">Cancel</button>
+</div>
+</sc-if>
+
+<!-- REVIEW -->
+<sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;height:100%;animation:ctUp .3s cubic-bezier(.2,.8,.2,1)">
+  <div style="padding:22px 12px 0;display:flex;align-items:center;justify-content:space-between">
+    <button onClick="{{ backToAdd }}" style="height:40px;padding:0 10px;border:none;background:transparent;display:flex;align-items:center;gap:6px;font-size:15px;color:#807A72;cursor:pointer"><svg width="8" height="14" viewBox="0 0 10 16" fill="none" stroke="#807A72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2 2 8l6 6"></path></svg>Back</button>
+    <span style="font-size:16px;font-weight:600">Review</span>
+    <span style="width:70px"></span>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:12px 20px 24px">
+    <div style="font-size:14px;color:#807A72;padding:0 4px">{{ reviewSubtitle }}</div>
+    <sc-if value="{{ lowConf }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top:14px;background:#F4EDDA;border-radius:16px;padding:12px 14px;font-size:14px;color:#6E5A1C;text-wrap:pretty">One portion was hard to judge from the photo. Check the amount marked with ~ before saving.</div>
+    </sc-if>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
+      <sc-for list="{{ reviewItems }}" as="r" hint-placeholder-count="3">
+        <div style="background:#fff;border-radius:20px;padding:14px 16px 12px;border:1px solid {{ r.border }}">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+            <input value="{{ r.name }}" onChange="{{ r.onName }}" style="flex:1;min-width:0;border:none;background:transparent;font-size:17px;font-weight:600;padding:0;border-bottom:1px dashed transparent" style-focus="border-bottom-color:#CFC8BD">
+            <button onClick="{{ r.remove }}" aria-label="Remove item" style="width:32px;height:32px;border-radius:50%;border:none;background:#F7F4EF;color:#807A72;font-size:16px;line-height:1;display:grid;place-items:center;cursor:pointer;flex:none">×</button>
+          </div>
+          <div style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;height:22px;padding:0 9px;border-radius:999px;background:{{ r.hintBg }};color:{{ r.hintInk }};font-size:12px;font-weight:600">{{ r.hint }}</div>
+          <sc-if value="{{ r.low }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:#A8882F;margin-top:6px">{{ r.lowNote }}</div></sc-if>
+          <div style="display:grid;grid-template-columns:1.15fr 1fr 1fr 1fr 1fr;gap:4px;margin-top:12px">
+            <label style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;color:#807A72;font-weight:600">Amount</span><div style="display:flex;align-items:center;background:#F7F4EF;border-radius:10px;height:40px;padding:0 5px"><span style="font-size:14px;color:{{ r.amtInk }};font-weight:600">{{ r.tilde }}</span><input type="number" value="{{ r.amount }}" onChange="{{ r.onAmount }}" style="width:100%;min-width:0;border:none;background:transparent;font-size:14px;font-weight:600;color:{{ r.amtInk }};padding:0;font-variant-numeric:tabular-nums"><span style="font-size:12px;color:#807A72">g</span></div></label>
+            <label style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;color:#807A72;font-weight:600">kcal</span><input type="number" value="{{ r.kcal }}" onChange="{{ r.onKcal }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:40px;padding:0 4px;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums"></label>
+            <label style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;color:#807A72;font-weight:600">Protein</span><input type="number" value="{{ r.p }}" onChange="{{ r.onP }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:40px;padding:0 4px;font-size:14px;font-variant-numeric:tabular-nums"></label>
+            <label style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;color:#807A72;font-weight:600">Fat</span><input type="number" value="{{ r.f }}" onChange="{{ r.onF }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:40px;padding:0 4px;font-size:14px;font-variant-numeric:tabular-nums"></label>
+            <label style="display:flex;flex-direction:column;gap:3px"><span style="font-size:11px;color:#807A72;font-weight:600">Carbs</span><input type="number" value="{{ r.c }}" onChange="{{ r.onC }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:40px;padding:0 4px;font-size:14px;font-variant-numeric:tabular-nums"></label>
+          </div>
+          <button onClick="{{ r.toggleSave }}" style="margin-top:12px;display:flex;align-items:center;gap:10px;border:none;background:transparent;padding:4px 0;cursor:pointer;font-size:13px;color:#807A72">
+            <span style="width:34px;height:20px;border-radius:999px;background:{{ r.swBg }};position:relative;transition:background .2s;flex:none"><span style="position:absolute;top:2px;left:{{ r.swLeft }};width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s"></span></span>{{ r.saveLabel }}
+          </button>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;padding:22px 4px 4px">
+      <span style="font-size:15px;font-weight:600">Meal total</span>
+      <span style="font-size:22px;font-weight:600;font-variant-numeric:tabular-nums">{{ reviewKcal }} <span style="font-size:13px;color:#807A72;font-weight:500">kcal</span></span>
+    </div>
+    <div style="font-size:13px;color:#807A72;text-align:right;padding:0 4px">{{ reviewMacros }}</div>
+    <sc-if value="{{ noteOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top:18px;background:#fff;border-radius:20px;padding:14px">
+        <div style="font-size:13px;font-weight:600;color:#807A72">Correction</div>
+        <textarea value="{{ reNote }}" onChange="{{ setReNote }}" rows="2" placeholder="e.g. the meat was 200 g, not 110" style="margin-top:6px;width:100%;border:none;background:transparent;resize:none;font-size:16px;line-height:1.45;display:block;box-sizing:border-box"></textarea>
+        <button onClick="{{ reRun }}" style="margin-top:8px;height:44px;padding:0 18px;border-radius:999px;border:none;background:#1F1D1A;color:#fff;font-size:14px;font-weight:600;cursor:pointer">Re-run with note</button>
+      </div>
+    </sc-if>
+  </div>
+  <div style="padding:12px 20px 24px;display:flex;flex-direction:column;gap:8px">
+    <button onClick="{{ confirmSave }}" style="width:100%;height:56px;border-radius:18px;border:none;background:#6B8F71;color:#fff;font-size:17px;font-weight:600;cursor:pointer">Confirm & save</button>
+    <button onClick="{{ toggleNote }}" style="width:100%;height:48px;border-radius:16px;border:none;background:transparent;color:#1F1D1A;font-size:15px;font-weight:600;cursor:pointer">{{ noteBtnLabel }}</button>
+  </div>
+</div>
+</sc-if>
+
+<!-- FAILED -->
+<sc-if value="{{ isFailed }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;height:100%;align-items:center;justify-content:center;padding:0 36px;text-align:center;animation:ctFade .3s">
+  <div style="width:72px;height:72px;border-radius:50%;background:#EFEBE4;display:grid;place-items:center"><svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="#807A72" stroke-width="1.8" stroke-linecap="round"><path d="M13 7v8M13 19.5v.5"></path></svg></div>
+  <div style="font-size:20px;font-weight:600;margin-top:28px">Couldn't make out the food</div>
+  <div style="font-size:15px;color:#807A72;margin-top:8px;text-wrap:pretty">The plate photo is too dark to tell the dish or the portion. A brighter shot from above, or a word or two about what it is, usually fixes this.</div>
+  <div style="display:flex;flex-direction:column;gap:8px;width:100%;margin-top:36px">
+    <button onClick="{{ backToAdd }}" style="width:100%;height:56px;border-radius:18px;border:none;background:#6B8F71;color:#fff;font-size:17px;font-weight:600;cursor:pointer">Retake or add a note</button>
+    <button onClick="{{ openManual }}" style="width:100%;height:48px;border-radius:16px;border:none;background:transparent;color:#1F1D1A;font-size:15px;font-weight:600;cursor:pointer">Add by hand instead</button>
+  </div>
+</div>
+</sc-if>
+
+<!-- MANUAL -->
+<sc-if value="{{ isManual }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;height:100%;animation:ctUp .3s cubic-bezier(.2,.8,.2,1)">
+  <div style="padding:22px 12px 0;display:flex;align-items:center;justify-content:space-between">
+    <button onClick="{{ backToAdd }}" style="height:40px;padding:0 10px;border:none;background:transparent;display:flex;align-items:center;gap:6px;font-size:15px;color:#807A72;cursor:pointer"><svg width="8" height="14" viewBox="0 0 10 16" fill="none" stroke="#807A72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2 2 8l6 6"></path></svg>Back</button>
+    <span style="font-size:16px;font-weight:600">Add by hand</span>
+    <span style="width:70px"></span>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:12px 20px 24px">
+    <button onClick="{{ pickFromLibrary }}" style="width:100%;height:52px;border-radius:16px;border:1px solid #E6E1D8;background:#fff;font-size:15px;font-weight:600;color:#1F1D1A;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:0 16px"><span>Pick from library</span><span style="font-size:13px;color:#807A72;font-weight:500">{{ libCount }} saved</span></button>
+    <div style="margin-top:22px;font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#807A72;padding:0 4px">Or type the numbers</div>
+    <div style="margin-top:10px;background:#fff;border-radius:20px;padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+      <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:12px;color:#807A72;font-weight:600">Name</span><input value="{{ man.name }}" onChange="{{ man.onName }}" placeholder="e.g. Rye bread, 2 slices" style="width:100%;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:12px;height:48px;padding:0 14px;font-size:16px"></label>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#807A72;font-weight:600">Amount g</span><input type="number" value="{{ man.amount }}" onChange="{{ man.onAmount }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:44px;padding:0 8px;font-size:15px;font-weight:600"></label>
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#807A72;font-weight:600">kcal</span><input type="number" value="{{ man.kcal }}" onChange="{{ man.onKcal }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:44px;padding:0 8px;font-size:15px;font-weight:600"></label>
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#807A72;font-weight:600">Protein</span><input type="number" value="{{ man.p }}" onChange="{{ man.onP }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:44px;padding:0 8px;font-size:15px"></label>
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#807A72;font-weight:600">Fat</span><input type="number" value="{{ man.f }}" onChange="{{ man.onF }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:44px;padding:0 8px;font-size:15px"></label>
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#807A72;font-weight:600">Carbs</span><input type="number" value="{{ man.c }}" onChange="{{ man.onC }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:44px;padding:0 8px;font-size:15px"></label>
+      </div>
+    </div>
+    <div style="margin-top:22px;font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#807A72;padding:0 4px">Meal</div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <sc-for list="{{ mealChips }}" as="ch" hint-placeholder-count="4">
+        <button onClick="{{ ch.select }}" style="height:38px;padding:0 15px;border-radius:999px;border:1px solid {{ ch.border }};background:{{ ch.bg }};color:{{ ch.color }};font-size:14px;font-weight:600;cursor:pointer">{{ ch.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+  <div style="padding:12px 20px 24px">
+    <button onClick="{{ saveManual }}" disabled="{{ manInvalid }}" style="width:100%;height:56px;border-radius:18px;border:none;background:{{ manBg }};color:#fff;font-size:17px;font-weight:600;cursor:pointer">{{ manBtn }}</button>
+  </div>
+</div>
+</sc-if>
+
+<!-- LIBRARY -->
+<sc-if value="{{ isLibrary }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;height:100%;animation:ctFade .25s">
+  <div style="padding:22px 20px 0;display:flex;align-items:center;justify-content:space-between">
+    <sc-if value="{{ picking }}" hint-placeholder-val="{{ false }}"><button onClick="{{ backToManual }}" style="height:40px;padding:0 2px;border:none;background:transparent;display:flex;align-items:center;gap:6px;font-size:15px;color:#807A72;cursor:pointer"><svg width="8" height="14" viewBox="0 0 10 16" fill="none" stroke="#807A72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2 2 8l6 6"></path></svg>Back</button></sc-if>
+    <span style="font-size:24px;font-weight:600;letter-spacing:-.4px">{{ libTitle }}</span>
+    <button onClick="{{ newProduct }}" style="height:36px;padding:0 14px;border-radius:999px;border:none;background:#1F1D1A;color:#fff;font-size:13px;font-weight:600;cursor:pointer">New</button>
+  </div>
+  <div style="padding:16px 20px 0">
+    <div style="display:flex;align-items:center;gap:10px;background:#fff;border-radius:14px;height:48px;padding:0 14px">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#807A72" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="5"></circle><path d="m11 11 3.5 3.5"></path></svg>
+      <input value="{{ query }}" onChange="{{ setQuery }}" placeholder="Search your products" style="flex:1;border:none;background:transparent;font-size:16px">
+    </div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px 20px 140px">
+    <sc-if value="{{ libEmpty }}" hint-placeholder-val="{{ false }}"><div style="text-align:center;color:#807A72;font-size:14px;padding:48px 24px">Nothing matches “{{ query }}”. Add it with New.</div></sc-if>
+    <div style="background:#fff;border-radius:20px;overflow:hidden">
+      <sc-for list="{{ libRows }}" as="pr" hint-placeholder-count="5">
+        <div style="display:flex;align-items:center;border-top:1px solid {{ pr.sep }}">
+          <button onClick="{{ pr.open }}" style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:14px 0 14px 16px;border:none;background:transparent;text-align:left;cursor:pointer" style-active="background:#F7F4EF">
+            <span style="font-size:16px;font-weight:600">{{ pr.name }}</span>
+            <span style="font-size:13px;color:#807A72;font-variant-numeric:tabular-nums">{{ pr.meta }}</span>
+          </button>
+          <button onClick="{{ pr.toggleFav }}" aria-label="Favourite" style="width:48px;height:56px;border:none;background:transparent;display:grid;place-items:center;cursor:pointer"><svg width="18" height="18" viewBox="0 0 18 18" fill="{{ pr.favFill }}" stroke="{{ pr.favStroke }}" stroke-width="1.5" stroke-linejoin="round"><path d="m9 1.8 2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L1.8 7.1l5-.7z"></path></svg></button>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- WEEK -->
+<sc-if value="{{ isWeek }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;height:100%;animation:ctFade .25s">
+  <div style="padding:22px 20px 0;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:4px">
+      <button onClick="{{ prevWeek }}" style="width:40px;height:40px;border-radius:12px;border:none;background:transparent;display:grid;place-items:center;cursor:pointer"><svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="#1F1D1A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2 2 8l6 6"></path></svg></button>
+      <span style="font-size:17px;font-weight:600;padding:0 6px">{{ weekLabel }}</span>
+      <button onClick="{{ nextWeek }}" disabled="{{ weekIsCurrent }}" style="width:40px;height:40px;border-radius:12px;border:none;background:transparent;display:grid;place-items:center;cursor:pointer;opacity:{{ nextWeekOpacity }}"><svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="#1F1D1A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 6 6-6 6"></path></svg></button>
+    </div>
+    <sc-if value="{{ weekNotCurrent }}" hint-placeholder-val="{{ false }}"><button onClick="{{ thisWeek }}" style="height:32px;padding:0 12px;border-radius:999px;border:1px solid #E6E1D8;background:#fff;font-size:13px;font-weight:600;cursor:pointer">This week</button></sc-if>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:0 20px 140px">
+    <div style="padding:26px 0 0">
+      <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:60px;font-weight:600;letter-spacing:-2px;line-height:1;font-variant-numeric:tabular-nums">{{ weekAvg }}</span><span style="font-size:15px;color:#807A72;font-weight:500">kcal / day</span></div>
+      <div style="font-size:14px;color:#807A72;margin-top:8px">{{ weekSub }}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:18px">
+      <div style="background:#fff;border-radius:16px;padding:12px 14px"><div style="font-size:12px;color:#807A72;font-weight:600">Protein</div><div style="font-size:18px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums">{{ weekP }} <span style="font-size:12px;color:#807A72;font-weight:500">g</span></div></div>
+      <div style="background:#fff;border-radius:16px;padding:12px 14px"><div style="font-size:12px;color:#807A72;font-weight:600">Fat</div><div style="font-size:18px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums">{{ weekF }} <span style="font-size:12px;color:#807A72;font-weight:500">g</span></div></div>
+      <div style="background:#fff;border-radius:16px;padding:12px 14px"><div style="font-size:12px;color:#807A72;font-weight:600">Carbs</div><div style="font-size:18px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums">{{ weekC }} <span style="font-size:12px;color:#807A72;font-weight:500">g</span></div></div>
+    </div>
+    <div style="margin-top:28px;background:#fff;border-radius:20px;padding:20px 16px 14px;position:relative">
+      <sc-if value="{{ hasGoal }}" hint-placeholder-val="{{ true }}"><div style="position:absolute;left:16px;right:16px;top:{{ goalLineTop }};border-top:1px dashed #CFC8BD"></div><div style="position:absolute;right:16px;top:{{ goalLabelTop }};font-size:11px;color:#A39D94">goal {{ goalFmt }}</div></sc-if>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;align-items:end;height:160px">
+        <sc-for list="{{ bars }}" as="b" hint-placeholder-count="7">
+          <button onClick="{{ b.open }}" style="height:100%;border:none;background:transparent;padding:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:0;cursor:pointer">
+            <span style="font-size:11px;color:#807A72;font-variant-numeric:tabular-nums;margin-bottom:6px">{{ b.val }}</span>
+            <span style="width:100%;height:{{ b.h }};border-radius:8px;background:{{ b.bg }};transition:height .4s"></span>
+          </button>
+        </sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:10px">
+        <sc-for list="{{ bars }}" as="b" hint-placeholder-count="7">
+          <span style="text-align:center;font-size:12px;font-weight:{{ b.fw }};color:{{ b.labelInk }}">{{ b.label }}</span>
+        </sc-for>
+      </div>
+    </div>
+    <div style="font-size:12px;color:#A39D94;margin-top:12px;padding:0 4px">Tap a bar to open that day.</div>
+  </div>
+</div>
+</sc-if>
+
+<!-- SETTINGS -->
+<sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;height:100%;animation:ctUp .3s cubic-bezier(.2,.8,.2,1)">
+  <div style="padding:22px 12px 0;display:flex;align-items:center;justify-content:space-between">
+    <button onClick="{{ goTodayScreen }}" style="height:40px;padding:0 10px;border:none;background:transparent;display:flex;align-items:center;gap:6px;font-size:15px;color:#807A72;cursor:pointer"><svg width="8" height="14" viewBox="0 0 10 16" fill="none" stroke="#807A72" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2 2 8l6 6"></path></svg>Back</button>
+    <span style="font-size:16px;font-weight:600">Settings</span>
+    <span style="width:70px"></span>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px 20px 24px">
+    <div style="background:#fff;border-radius:20px;overflow:hidden">
+      <div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div><div style="font-size:16px;font-weight:600">Daily goal</div><div style="font-size:13px;color:#807A72;margin-top:2px">Leave empty to hide the ring</div></div>
+        <div style="display:flex;align-items:center;gap:6px;background:#F7F4EF;border-radius:12px;height:44px;padding:0 12px"><input type="number" value="{{ goalInput }}" onChange="{{ setGoal }}" placeholder="—" style="width:64px;border:none;background:transparent;font-size:16px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums"><span style="font-size:13px;color:#807A72">kcal</span></div>
+      </div>
+      <div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #F0ECE5">
+        <div><div style="font-size:16px;font-weight:600">Amounts</div><div style="font-size:13px;color:#807A72;margin-top:2px">How new items are entered</div></div>
+        <div style="display:flex;background:#F7F4EF;border-radius:12px;padding:3px">
+          <button onClick="{{ unitsGrams }}" style="height:36px;padding:0 14px;border-radius:10px;border:none;background:{{ gBg }};color:{{ gInk }};font-size:13px;font-weight:600;cursor:pointer;box-shadow:{{ gShadow }}">Grams</button>
+          <button onClick="{{ unitsPortions }}" style="height:36px;padding:0 14px;border-radius:10px;border:none;background:{{ pBg }};color:{{ pInk }};font-size:13px;font-weight:600;cursor:pointer;box-shadow:{{ pShadow }}">Portions</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:12px;background:#fff;border-radius:20px;overflow:hidden">
+      <div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;opacity:.6">
+        <div><div style="font-size:16px;font-weight:600">Account & sync</div><div style="font-size:13px;color:#807A72;margin-top:2px">Data stays on this phone for now</div></div>
+        <span style="font-size:12px;font-weight:600;color:#807A72;background:#F7F4EF;border-radius:999px;padding:4px 10px">Coming later</span>
+      </div>
+      <button onClick="{{ exportData }}" style="width:100%;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;border:none;border-top:1px solid #F0ECE5;background:transparent;text-align:left;cursor:pointer" style-active="background:#F7F4EF">
+        <div><div style="font-size:16px;font-weight:600">Export data</div><div style="font-size:13px;color:#807A72;margin-top:2px">{{ exportMeta }}</div></div>
+        <svg width="8" height="14" viewBox="0 0 10 16" fill="none" stroke="#A39D94" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 6 6-6 6"></path></svg>
+      </button>
+    </div>
+    <div style="font-size:12px;color:#A39D94;margin-top:20px;padding:0 4px">Version 0.1 · local only</div>
+  </div>
+</div>
+</sc-if>
+
+<!-- BOTTOM NAV + FAB -->
+<sc-if value="{{ showNav }}" hint-placeholder-val="{{ true }}">
+  <button onClick="{{ openAdd }}" aria-label="Add meal" style="position:absolute;right:20px;bottom:96px;width:60px;height:60px;border-radius:50%;border:none;background:#6B8F71;color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 18px -6px rgba(107,143,113,.6)" style-active="transform:scale(.96)"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M11 3v16M3 11h16"></path></svg></button>
+  <div style="position:absolute;left:0;right:0;bottom:0;height:80px;background:rgba(247,244,239,.92);backdrop-filter:blur(10px);border-top:1px solid #E6E1D8;display:grid;grid-template-columns:repeat(3,1fr);padding:0 12px 10px">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+      <button onClick="{{ t.go }}" style="border:none;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer;color:{{ t.ink }}">
+        <span style="font-size:14px;font-weight:600">{{ t.label }}</span>
+        <span style="width:5px;height:5px;border-radius:50%;background:{{ t.dot }}"></span>
+      </button>
+    </sc-for>
+  </div>
+</sc-if>
+
+<!-- SHEET -->
+<sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(31,29,26,.28);animation:ctFade .2s"></div>
+  <div style="position:absolute;left:0;right:0;bottom:0;background:#F7F4EF;border-radius:28px 28px 0 0;padding:10px 20px 24px;animation:ctUp .3s cubic-bezier(.2,.8,.2,1);max-height:86%;overflow-y:auto">
+    <div style="width:36px;height:4px;border-radius:2px;background:#D9D3C8;margin:0 auto 14px"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#807A72">{{ sh.title }}</span>
+      <sc-if value="{{ sh.canDelete }}" hint-placeholder-val="{{ false }}"><button onClick="{{ sh.del }}" style="height:32px;padding:0 12px;border-radius:999px;border:none;background:transparent;color:#B4604A;font-size:13px;font-weight:600;cursor:pointer">Delete</button></sc-if>
+    </div>
+    <div style="margin-top:10px;background:#fff;border-radius:20px;padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+      <input value="{{ sh.name }}" onChange="{{ sh.onName }}" placeholder="Name" style="width:100%;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:12px;height:48px;padding:0 14px;font-size:16px;font-weight:600">
+      <sc-if value="{{ sh.isProduct }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:13px;color:#807A72">Values per</span>
+          <div style="display:flex;background:#F7F4EF;border-radius:12px;padding:3px">
+            <button onClick="{{ sh.basis100 }}" style="height:32px;padding:0 12px;border-radius:9px;border:none;background:{{ sh.b100Bg }};color:{{ sh.b100Ink }};font-size:13px;font-weight:600;cursor:pointer">100 g</button>
+            <button onClick="{{ sh.basisPortion }}" style="height:32px;padding:0 12px;border-radius:9px;border:none;background:{{ sh.bPorBg }};color:{{ sh.bPorInk }};font-size:13px;font-weight:600;cursor:pointer">Portion</button>
+          </div>
+        </div>
+      </sc-if>
+      <div style="display:grid;grid-template-columns:repeat({{ sh.cols }},1fr);gap:6px">
+        <sc-if value="{{ sh.hasAmount }}" hint-placeholder-val="{{ true }}"><label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#807A72;font-weight:600">Amount g</span><input type="number" value="{{ sh.amount }}" onChange="{{ sh.onAmount }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:44px;padding:0 8px;font-size:15px;font-weight:600"></label></sc-if>
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#807A72;font-weight:600">kcal</span><input type="number" value="{{ sh.kcal }}" onChange="{{ sh.onKcal }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:44px;padding:0 8px;font-size:15px;font-weight:600"></label>
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#807A72;font-weight:600">Protein</span><input type="number" value="{{ sh.p }}" onChange="{{ sh.onP }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:44px;padding:0 8px;font-size:15px"></label>
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#807A72;font-weight:600">Fat</span><input type="number" value="{{ sh.f }}" onChange="{{ sh.onF }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:44px;padding:0 8px;font-size:15px"></label>
+        <label style="display:flex;flex-direction:column;gap:4px"><span style="font-size:11px;color:#807A72;font-weight:600">Carbs</span><input type="number" value="{{ sh.c }}" onChange="{{ sh.onC }}" style="width:100%;min-width:0;box-sizing:border-box;border:none;background:#F7F4EF;border-radius:10px;height:44px;padding:0 8px;font-size:15px"></label>
+      </div>
+      <sc-if value="{{ sh.isProduct }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ sh.toggleFav }}" style="display:flex;align-items:center;gap:10px;border:none;background:transparent;padding:4px 0;cursor:pointer;font-size:13px;color:#807A72">
+          <span style="width:34px;height:20px;border-radius:999px;background:{{ sh.favBg }};position:relative;transition:background .2s;flex:none"><span style="position:absolute;top:2px;left:{{ sh.favLeft }};width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s"></span></span>Frequent favourite
+        </button>
+      </sc-if>
+    </div>
+    <sc-if value="{{ sh.isProduct }}" hint-placeholder-val="{{ false }}">
+      <div style="margin-top:18px;font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#807A72;padding:0 4px">Add to a meal</div>
+      <div style="margin-top:10px;background:#fff;border-radius:20px;padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:6px;background:#F7F4EF;border-radius:12px;height:44px;padding:0 12px"><input type="number" value="{{ sh.addAmount }}" onChange="{{ sh.onAddAmount }}" style="width:56px;border:none;background:transparent;font-size:16px;font-weight:600;text-align:right"><span style="font-size:13px;color:#807A72">{{ sh.addUnit }}</span></div>
+          <span style="font-size:14px;color:#807A72;font-variant-numeric:tabular-nums">= {{ sh.addKcal }} kcal</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <sc-for list="{{ mealChips }}" as="ch" hint-placeholder-count="4">
+            <button onClick="{{ ch.select }}" style="height:34px;padding:0 13px;border-radius:999px;border:1px solid {{ ch.border }};background:{{ ch.bg }};color:{{ ch.color }};font-size:13px;font-weight:600;cursor:pointer">{{ ch.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+    <button onClick="{{ sh.primary }}" style="margin-top:14px;width:100%;height:56px;border-radius:18px;border:none;background:#6B8F71;color:#fff;font-size:17px;font-weight:600;cursor:pointer">{{ sh.primaryLabel }}</button>
+  </div>
+</sc-if>
+
+<!-- TOAST -->
+<sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;left:20px;right:20px;bottom:92px;display:flex;justify-content:center;pointer-events:none;animation:ctUp .3s"><span style="background:#1F1D1A;color:#fff;font-size:14px;font-weight:600;padding:12px 18px;border-radius:999px;box-shadow:0 8px 24px -8px rgba(0,0,0,.4)">{{ toast }}</span></div>
+</sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:412,&quot;height&quot;:915},&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;today&quot;,&quot;options&quot;:[&quot;today&quot;,&quot;add&quot;,&quot;analyzing&quot;,&quot;review&quot;,&quot;failed&quot;,&quot;manual&quot;,&quot;library&quot;,&quot;week&quot;,&quot;settings&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;scenario&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;normal&quot;,&quot;options&quot;:[&quot;normal&quot;,&quot;empty&quot;,&quot;filled&quot;,&quot;lowconf&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;goal&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:2100,&quot;min&quot;:0,&quot;max&quot;:5000,&quot;step&quot;:50,&quot;unit&quot;:&quot;kcal&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Data&quot;}}">
+const TODAY='2026-10-01';
+const MEAL_ORDER=['Breakfast','Lunch','Dinner','Snack'];
+const WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parse=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const shift=(s,n)=>{const d=parse(s);d.setDate(d.getDate()+n);return iso(d)};
+const fmt=n=>Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'\u2009');
+const r1=n=>Math.round(n*10)/10;
+let uid=100;const nid=()=>++uid;
+const mk=(name,amount,kcal,p,f,c)=>({id:nid(),name,amount,kcal,p,f,c});
+const POOL={
+  b1:()=>[mk('Oat porridge with milk',280,312,11,7,52),mk('Banana',120,107,1.3,0.4,27),mk('Cappuccino, oat milk',200,68,3.5,3.6,5.6)],
+  b2:()=>[mk('Boiled eggs',110,156,12.6,10.6,1.2),mk('Rye bread',70,181,6,2.3,34),mk('Cappuccino, oat milk',200,68,3.5,3.6,5.6)],
+  b3:()=>[mk('Greek yogurt 2%',200,146,20,4,9),mk('Granola',40,184,4,7,26),mk('Blueberries',80,46,0.6,0.3,11)],
+  l1:()=>[mk('Chicken breast, grilled',150,248,46,5.4,0),mk('Basmati rice, cooked',180,234,4.8,0.5,51),mk('Cucumber & tomato salad',150,48,1.5,2.2,5.5)],
+  l2:()=>[mk('Lentil soup',350,263,15,6,38),mk('Rye bread',35,91,3,1.2,17)],
+  l3:()=>[mk('Salmon, baked',140,291,30,19,0),mk('Potatoes, boiled',200,174,4,0.2,40),mk('Green beans',100,35,1.8,0.3,7)],
+  d1:()=>[mk('Spaghetti bolognese',380,562,28,18,70),mk('Parmesan',10,43,3.8,2.9,0.1)],
+  d2:()=>[mk('Cottage cheese 5%',200,242,34,10,6),mk('Apple',160,83,0.4,0.3,22)],
+  d3:()=>[mk('Chicken & vegetable stir-fry',340,398,36,14,32)],
+  d4:()=>[mk('Omelette, 3 eggs',180,282,20,21,2),mk('Tomatoes',120,22,1,0.2,4.7)],
+  s1:()=>[mk('Greek yogurt 2%',170,124,17,3.4,7.6),mk('Walnuts',25,164,3.8,16,3.4)],
+  s2:()=>[mk('Dark chocolate 70%',20,118,1.6,8.5,9),mk('Flat white',180,86,4.5,4.6,6.6)],
+  s3:()=>[mk('Apple',160,83,0.4,0.3,22)]
+};
+function sampleDays(){
+  const days={};
+  const plan={
+    '2026-09-21':['b1','l1','d3','s1'],'2026-09-22':['b2','l2','d1','s2'],'2026-09-23':['b3','l3','d4'],
+    '2026-09-24':['b1','l1','d2','s3'],'2026-09-25':['b2','l3','d1','s1','s2'],'2026-09-26':['b3','l2','d3'],
+    '2026-09-27':['b1','d4'],'2026-09-28':['b2','l1','d1','s1'],'2026-09-29':['b3','l3','d2','s2'],
+    '2026-09-30':['b1','l2','d3','s3'],'2026-10-01':['b1','l1','s1']
+  };
+  for(const d in plan){
+    days[d]={meals:plan[d].map(k=>({type:k[0]==='b'?'Breakfast':k[0]==='l'?'Lunch':k[0]==='d'?'Dinner':'Snack',items:POOL[k]()}))};
+  }
+  return days;
+}
+const P=(name,basis,kcal,p,f,c,fav,portion)=>({id:nid(),name,basis,kcal,p,f,c,fav:!!fav,portion:portion||100});
+function sampleLibrary(){return [
+  P('Barilla spaghetti, dry','100',359,13,1.5,72,true),
+  P('Chicken breast, grilled','100',165,31,3.6,0,true),
+  P('Greek yogurt 2%','100',73,10,2,4.5,true),
+  P('Oat porridge with milk','100',110,4,2.5,18),
+  P('Basmati rice, cooked','100',130,2.7,0.3,28),
+  P('Cappuccino, oat milk','portion',68,3.5,3.6,5.6,true,200),
+  P('Banana','portion',107,1.3,0.4,27,false,120),
+  P('Tomato & basil sauce, jar','100',60,1.5,2.8,7),
+  P('Minced beef 10%, fried','100',225,26,13,0),
+  P('Broccoli, steamed','100',35,2.8,0.4,7),
+  P('Rye bread','100',259,8.5,3.3,48),
+  P('Boiled egg','portion',78,6.3,5.3,0.6,false,55),
+  P('Walnuts','100',654,15,65,14),
+  P('Cottage cheese 5%','100',121,17,5,3)
+];}
+function recognized(low){
+  const items=[
+    {id:nid(),name:'Spaghetti, cooked',amount:330,kcal:539,p:19.5,f:2.3,c:108,src:'library',hint:'from your library · Barilla spaghetti',save:false},
+    {id:nid(),name:'Tomato & basil sauce',amount:120,kcal:72,p:1.8,f:3.4,c:8.4,src:'label',hint:'from label photo',save:true},
+    {id:nid(),name:'Minced beef, pan-fried',amount:110,kcal:248,p:28.6,f:14.3,c:0,src:'estimated',hint:'estimated',save:false,low:!!low,lowNote:'Portion hard to judge · no hand or cutlery in frame for scale'},
+    {id:nid(),name:'Broccoli, steamed',amount:90,kcal:32,p:2.5,f:0.4,c:6.3,src:'estimated',hint:'estimated',save:false}
+  ];
+  items.forEach(it=>{it.per={kcal:it.kcal/it.amount,p:it.p/it.amount,f:it.f/it.amount,c:it.c/it.amount}});
+  return items;
+}
+const STEPS=['Reading the nutrition label…','Estimating the portion from the plate…','Matching with your library…','Filling the rest from common values…'];
+const CONTEXT='Uses your photos, your note and your saved products. Anything it can’t read is estimated and marked.';
+function defaultMeal(){const h=new Date().getHours();return h<11?'Breakfast':h<15?'Lunch':h<21?'Dinner':'Snack'}
+
+class Component extends DCLogic {
+  constructor(p){
+    super(p);
+    const screen=p.screen||'today', sc=p.scenario||'normal';
+    const days=sampleDays();
+    if(sc==='empty') delete days[TODAY];
+    const filled=['filled','lowconf','failed'].includes(sc)||['analyzing','review','failed'].includes(screen);
+    this.pinned=!!p.screen;
+    this.state={
+      screen:screen==='failed'?'failed':screen, prevScreen:'today', date:TODAY, datePick:false,
+      days, library:sampleLibrary(), units:'g', goal:p.goal??2100,
+      draft:{date:TODAY,meal:'Dinner',text:filled?'about 150 g pasta, the sauce is from the jar in the second photo, broccoli is steamed':'',photos:filled?[{id:1,kind:'plate'},{id:2,kind:'label'}]:[]},
+      recording:false, step:0,
+      review:(screen==='review'||sc==='lowconf')?recognized(sc==='lowconf'):[], lowConf:sc==='lowconf', noteOpen:false, reNote:'',
+      man:{name:'',amount:'',kcal:'',p:'',f:'',c:''}, picking:false,
+      query:'', sheet:null, toast:'', weekStart:'2026-09-28'
+    };
+  }
+  componentWillUnmount(){clearTimeout(this.t);clearInterval(this.iv);clearTimeout(this.tt)}
+  go(screen){this.setState(s=>({screen,prevScreen:s.screen,datePick:false}))}
+  showToast(msg){clearTimeout(this.tt);this.setState({toast:msg});this.tt=setTimeout(()=>this.setState({toast:''}),2400)}
+  startAnalyze(outcome){
+    this.setState({screen:'analyzing',step:0});
+    clearInterval(this.iv);clearTimeout(this.t);
+    this.iv=setInterval(()=>this.setState(s=>({step:(s.step+1)%STEPS.length})),900);
+    this.t=setTimeout(()=>{
+      clearInterval(this.iv);
+      const o=outcome||(Math.random()<.6?'ok':Math.random()<.65?'low':'fail');
+      if(o==='fail') this.setState({screen:'failed'});
+      else this.setState({screen:'review',review:recognized(o==='low'),lowConf:o==='low',noteOpen:false});
+    },3400);
+  }
+  dayTotals(d){const t={kcal:0,p:0,f:0,c:0};(d?.meals||[]).forEach(m=>m.items.forEach(i=>{t.kcal+=+i.kcal||0;t.p+=+i.p||0;t.f+=+i.f||0;t.c+=+i.c||0}));return t}
+  addItems(date,type,items){
+    this.setState(s=>{
+      const days={...s.days};const day=days[date]?{meals:[...days[date].meals]}:{meals:[]};
+      let m=day.meals.find(x=>x.type===type);
+      if(m&&type!=='Snack'){m={...m,items:[...m.items,...items]};day.meals=day.meals.map(x=>x.type===type?m:x)}
+      else day.meals=[...day.meals,{type,items}];
+      day.meals.sort((a,b)=>MEAL_ORDER.indexOf(a.type)-MEAL_ORDER.indexOf(b.type));
+      days[date]=day;return {days};
+    });
+  }
+  scaleItem(it,amount){const a=+amount||0;const per=it.per||{kcal:it.kcal/it.amount,p:it.p/it.amount,f:it.f/it.amount,c:it.c/it.amount};return {...it,per,amount:a,kcal:Math.round(per.kcal*a),p:r1(per.p*a),f:r1(per.f*a),c:r1(per.c*a)}}
+  renderVals(){
+    const s=this.state, S=this.setState.bind(this);
+    const sc=s.screen;
+    const day=s.days[s.date]; const tot=this.dayTotals(day);
+    const hasGoal=s.goal>0; const pct=hasGoal?Math.min(1,tot.kcal/s.goal):0;
+    const dd=parse(s.date);
+    const dateLabel=s.date===TODAY?'Today':s.date===shift(TODAY,-1)?'Yesterday':WD[dd.getDay()]+', '+dd.getDate()+' '+MON[dd.getMonth()];
+    const fullDate=d=>{const x=parse(d);return (d===TODAY?'Today':d===shift(TODAY,-1)?'Yesterday':WD[x.getDay()])+', '+x.getDate()+' '+MON[x.getMonth()]};
+    const stripDate=sc==='add'||sc==='manual'?s.draft.date:s.date;
+    const dateStrip=Array.from({length:7},(_,i)=>shift(TODAY,i-6)).map(d=>{const x=parse(d),on=d===stripDate;return {wd:WD[x.getDay()],num:x.getDate(),bg:on?'#1F1D1A':'#fff',color:on?'#fff':'#1F1D1A',border:on?'#1F1D1A':'#E6E1D8',select:()=>sc==='today'?S({date:d,datePick:false}):S(st=>({draft:{...st.draft,date:d},datePick:false}))}});
+    const meals=(day?.meals||[]).map(m=>({type:m.type,kcal:fmt(m.items.reduce((a,i)=>a+(+i.kcal||0),0)),items:m.items.map((it,i)=>({name:it.name,kcal:fmt(it.kcal),amountLabel:(s.units==='g'?it.amount+' g':it.amount+' g · 1 portion'),sep:i===0?'transparent':'#F0ECE5',open:()=>S({sheet:{type:'item',date:s.date,mealType:m.type,id:it.id,draft:{...it}}})}))}));
+    const mealChips=MEAL_ORDER.map(t=>{const cur=sc==='today'?(s.sheet?.addMeal||s.draft.meal):s.draft.meal;const on=t===cur;return {label:t,bg:on?'#1F1D1A':'transparent',color:on?'#fff':'#1F1D1A',border:on?'#1F1D1A':'#E6E1D8',select:()=>s.sheet?S(st=>({sheet:{...st.sheet,addMeal:t}})):S(st=>({draft:{...st.draft,meal:t}}))}});
+    const photos=s.draft.photos.map(ph=>({kindLabel:ph.kind==='plate'?'plate':'label',c1:ph.kind==='plate'?'#DCE4DA':'#E9E3D8',c2:ph.kind==='plate'?'#E6ECE4':'#F1ECE3',toggleKind:()=>S(st=>({draft:{...st.draft,photos:st.draft.photos.map(x=>x.id===ph.id?{...x,kind:x.kind==='plate'?'label':'plate'}:x)}})),remove:()=>S(st=>({draft:{...st.draft,photos:st.draft.photos.filter(x=>x.id!==ph.id)}}))}));
+    const addPhoto=kind=>S(st=>({draft:{...st.draft,photos:[...st.draft.photos,{id:nid(),kind}]}}));
+    const cantRecognize=!s.draft.text.trim()&&!s.draft.photos.length;
+    const rk=s.review.reduce((a,i)=>({kcal:a.kcal+(+i.kcal||0),p:a.p+(+i.p||0),f:a.f+(+i.f||0),c:a.c+(+i.c||0)}),{kcal:0,p:0,f:0,c:0});
+    const updR=(id,patch)=>S(st=>({review:st.review.map(x=>x.id===id?(typeof patch==='function'?patch(x):{...x,...patch}):x)}));
+    const num=e=>e.target.value===''?'':+e.target.value;
+    const reviewItems=s.review.map(it=>{const est=it.src==='estimated';return {
+      name:it.name,amount:it.amount,kcal:it.kcal,p:it.p,f:it.f,c:it.c,low:!!it.low,lowNote:it.lowNote,
+      hint:it.hint,hintBg:est?'#F4EDDA':it.src==='label'?'#E4ECE4':'#EFEBE4',hintInk:est?'#8A6E1F':it.src==='label'?'#3F5E45':'#5E584F',
+      tilde:est?'~':'',amtInk:it.low?'#A8882F':'#1F1D1A',border:it.low?'#E7D9A8':'transparent',
+      swBg:it.save?'#6B8F71':'#D9D3C8',swLeft:it.save?'16px':'2px',saveLabel:it.save?'Will be saved to library':'Save to library',
+      onName:e=>updR(it.id,{name:e.target.value}),onAmount:e=>updR(it.id,x=>this.scaleItem(x,e.target.value)),
+      onKcal:e=>updR(it.id,x=>({...x,kcal:num(e),per:{...x.per,kcal:(+e.target.value||0)/(x.amount||1)}})),
+      onP:e=>updR(it.id,x=>({...x,p:num(e),per:{...x.per,p:(+e.target.value||0)/(x.amount||1)}})),
+      onF:e=>updR(it.id,x=>({...x,f:num(e),per:{...x.per,f:(+e.target.value||0)/(x.amount||1)}})),
+      onC:e=>updR(it.id,x=>({...x,c:num(e),per:{...x.per,c:(+e.target.value||0)/(x.amount||1)}})),
+      toggleSave:()=>updR(it.id,x=>({...x,save:!x.save})),remove:()=>S(st=>({review:st.review.filter(x=>x.id!==it.id)}))}});
+    const m=s.man; const manInvalid=!m.name.trim()||!(+m.kcal>=0&&m.kcal!=='');
+    const setMan=k=>e=>S(st=>({man:{...st.man,[k]:e.target.value}}));
+    const q=s.query.trim().toLowerCase();
+    const libSorted=[...s.library].sort((a,b)=>(b.fav-a.fav)||a.name.localeCompare(b.name)).filter(p=>!q||p.name.toLowerCase().includes(q));
+    const libRows=libSorted.map((p,i)=>({name:p.name,meta:(p.basis==='100'?'per 100 g':'per portion · '+p.portion+' g')+' · '+p.kcal+' kcal · P '+p.p+' F '+p.f+' C '+p.c,sep:i===0?'transparent':'#F0ECE5',favFill:p.fav?'#6B8F71':'none',favStroke:p.fav?'#6B8F71':'#C9C3B8',
+      toggleFav:()=>S(st=>({library:st.library.map(x=>x.id===p.id?{...x,fav:!x.fav}:x)})),
+      open:()=>S({sheet:{type:'product',id:p.id,draft:{...p},addAmount:p.basis==='100'?100:1,addMeal:s.picking?s.draft.meal:defaultMeal()}})}));
+    // week
+    const ws=s.weekStart; const weekDays=Array.from({length:7},(_,i)=>shift(ws,i));
+    const totals=weekDays.map(d=>({d,t:this.dayTotals(s.days[d]),has:!!s.days[d]&&d<=TODAY}));
+    const withData=totals.filter(x=>x.has&&x.t.kcal>0);
+    const avg=k=>withData.length?withData.reduce((a,x)=>a+x.t[k],0)/withData.length:0;
+    const maxK=Math.max(s.goal||0,...totals.map(x=>x.t.kcal),1);
+    const H=120;
+    const bars=totals.map(x=>{const xd=parse(x.d);const isT=x.d===TODAY;const h=x.has&&x.t.kcal>0?Math.max(6,Math.round(H*x.t.kcal/maxK)):3;return {label:WD[xd.getDay()],val:x.has&&x.t.kcal>0?fmt(x.t.kcal):'',h:h+'px',bg:isT?'#6B8F71':x.has&&x.t.kcal>0?'#D7D1C6':'#EDE8E0',fw:isT?700:500,labelInk:isT?'#1F1D1A':'#807A72',open:()=>{if(x.d<=TODAY)this.setState({date:x.d,screen:'today'})}}});
+    const goalTop=hasGoal?Math.round(H*(1-Math.min(1,s.goal/maxK))):0;
+    const we=parse(shift(ws,6)),wsd=parse(ws);
+    const weekLabel=wsd.getDate()+' '+(wsd.getMonth()!==we.getMonth()?MON[wsd.getMonth()]+' ':'')+'– '+we.getDate()+' '+MON[we.getMonth()];
+    const weekIsCurrent=ws==='2026-09-28';
+    // sheet
+    const sh=(()=>{const x=s.sheet;if(!x)return {};const d=x.draft;const set=k=>e=>S(st=>({sheet:{...st.sheet,draft:{...st.sheet.draft,[k]:e.target.value}}}));
+      if(x.type==='item'){return {title:x.mealType,canDelete:true,isProduct:false,hasAmount:true,cols:5,name:d.name,amount:d.amount,kcal:d.kcal,p:d.p,f:d.f,c:d.c,
+        onName:set('name'),onAmount:e=>S(st=>({sheet:{...st.sheet,draft:this.scaleItem(st.sheet.draft,e.target.value)}})),onKcal:set('kcal'),onP:set('p'),onF:set('f'),onC:set('c'),
+        primaryLabel:'Save changes',primary:()=>{S(st=>{const days={...st.days};const day={meals:st.days[x.date].meals.map(mm=>mm.type!==x.mealType?mm:{...mm,items:mm.items.map(it=>it.id===x.id?{...it,...st.sheet.draft,amount:+st.sheet.draft.amount||0,kcal:+st.sheet.draft.kcal||0,p:+st.sheet.draft.p||0,f:+st.sheet.draft.f||0,c:+st.sheet.draft.c||0}:it)})};days[x.date]=day;return {days,sheet:null}})},
+        del:()=>{S(st=>{const days={...st.days};const day={meals:st.days[x.date].meals.map(mm=>mm.type!==x.mealType?mm:{...mm,items:mm.items.filter(it=>it.id!==x.id)}).filter(mm=>mm.items.length)};days[x.date]=day;return {days,sheet:null}});this.showToast('Removed')}};}
+      const isNew=x.isNew;const per100=d.basis==='100';const addAmt=+x.addAmount||0;const grams=per100?addAmt:addAmt*(+d.portion||100);const factor=per100?addAmt/100:addAmt;
+      const addKcal=Math.round((+d.kcal||0)*factor);
+      return {title:isNew?'New product':'Product',canDelete:!isNew,isProduct:true,hasAmount:false,cols:4,name:d.name,kcal:d.kcal,p:d.p,f:d.f,c:d.c,
+        b100Bg:per100?'#fff':'transparent',b100Ink:per100?'#1F1D1A':'#807A72',bPorBg:per100?'transparent':'#fff',bPorInk:per100?'#807A72':'#1F1D1A',
+        basis100:()=>S(st=>({sheet:{...st.sheet,draft:{...st.sheet.draft,basis:'100'},addAmount:100}})),basisPortion:()=>S(st=>({sheet:{...st.sheet,draft:{...st.sheet.draft,basis:'portion'},addAmount:1}})),
+        favBg:d.fav?'#6B8F71':'#D9D3C8',favLeft:d.fav?'16px':'2px',toggleFav:()=>S(st=>({sheet:{...st.sheet,draft:{...st.sheet.draft,fav:!st.sheet.draft.fav}}})),
+        onName:set('name'),onKcal:set('kcal'),onP:set('p'),onF:set('f'),onC:set('c'),
+        addAmount:x.addAmount,addUnit:per100?'g':(addAmt===1?'portion':'portions'),addKcal:fmt(addKcal),onAddAmount:e=>S(st=>({sheet:{...st.sheet,addAmount:e.target.value}})),
+        primaryLabel:isNew?'Save product':'Add to '+(x.addMeal||'meal'),
+        primary:()=>{const prod={...d,kcal:+d.kcal||0,p:+d.p||0,f:+d.f||0,c:+d.c||0};
+          if(isNew){if(!prod.name.trim())return;S(st=>({library:[...st.library,prod],sheet:null}));this.showToast('Saved to library');return}
+          S(st=>({library:st.library.map(pp=>pp.id===prod.id?prod:pp)}));
+          const date=s.picking?s.draft.date:s.date;const item={id:nid(),name:prod.name,amount:Math.round(grams),kcal:addKcal,p:r1(prod.p*factor),f:r1(prod.f*factor),c:r1(prod.c*factor)};
+          this.addItems(date,x.addMeal,[item]);S({sheet:null,picking:false,screen:'today',date});this.showToast('Added to '+x.addMeal)},
+        del:()=>{S(st=>({library:st.library.filter(pp=>pp.id!==x.id),sheet:null}));this.showToast('Deleted')}};
+    })();
+    const tabs=[['today','Today'],['week','Week'],['library','Library']].map(([k,label])=>{const on=sc===k;return {label,ink:on?'#1F1D1A':'#A39D94',dot:on?'#6B8F71':'transparent',go:()=>this.setState({screen:k,picking:false,datePick:false})}});
+    return {
+      isToday:sc==='today',isAdd:sc==='add',isAnalyzing:sc==='analyzing',isReview:sc==='review',isFailed:sc==='failed',isManual:sc==='manual',isLibrary:sc==='library',isWeek:sc==='week',isSettings:sc==='settings',
+      showNav:['today','week','library'].includes(sc)&&!s.picking,
+      dateLabel,notToday:s.date!==TODAY,datePick:s.datePick,dateStrip,
+      prevDay:()=>S(st=>({date:shift(st.date,-1)})),nextDay:()=>S(st=>({date:shift(st.date,1)})),goToday:()=>S({date:TODAY}),toggleDatePick:()=>S(st=>({datePick:!st.datePick})),
+      openSettings:()=>this.go('settings'),goTodayScreen:()=>this.go('today'),
+      totalKcal:fmt(tot.kcal),totP:Math.round(tot.p),totF:Math.round(tot.f),totC:Math.round(tot.c),hasGoal,
+      goalLine:hasGoal?(tot.kcal<=s.goal?fmt(s.goal-tot.kcal)+' left of '+fmt(s.goal):fmt(tot.kcal-s.goal)+' over '+fmt(s.goal)):(day?.meals?.length?meals.length+(meals.length===1?' meal':' meals')+' logged':''),
+      ringDash:(2*Math.PI*36*pct).toFixed(1)+' 999',ringColor:tot.kcal>s.goal?'#A8882F':'#6B8F71',
+      dayEmpty:!day||!day.meals.length,meals,
+      // add
+      draftDateLabel:fullDate(s.draft.date)+' · '+s.draft.meal,mealChips,photos,addPlatePhoto:()=>addPhoto('plate'),addLabelPhoto:()=>addPhoto('label'),
+      draftText:s.draft.text,setDraftText:e=>{const v=e.target.value;S(st=>({draft:{...st.draft,text:v}}))},
+      recording:s.recording,recHint:s.recording?'Listening… tap to stop':(s.draft.text?'Transcript is editable':'Hold a thought? Tap the mic'),recColor:s.recording?'#B4604A':'#A39D94',
+      micBg:s.recording?'#F4E3DD':'#F7F4EF',micInk:s.recording?'#B4604A':'#1F1D1A',
+      toggleRecord:()=>{if(s.recording){clearTimeout(this.rt);S({recording:false});return}S({recording:true});this.rt=setTimeout(()=>S(st=>({recording:false,draft:{...st.draft,text:(st.draft.text?st.draft.text.trim()+' ':'')+'the meat is about 110 grams, pan-fried without oil'}})),2600)},
+      openManual:()=>this.go('manual'),cantRecognize,recogBg:cantRecognize?'#CFC8BD':'#6B8F71',recognize:()=>this.startAnalyze(),
+      openAdd:()=>S(st=>({screen:'add',prevScreen:st.screen,draft:{...st.draft,date:st.date,meal:defaultMeal()}})),goBack:()=>this.go(s.prevScreen==='add'?'today':s.prevScreen),backToAdd:()=>this.go('add'),
+      // analyzing
+      analyzeStep:STEPS[s.step],analyzeContext:CONTEXT,cancelAnalyze:()=>{clearTimeout(this.t);clearInterval(this.iv);this.go('add')},
+      // review
+      reviewSubtitle:s.draft.meal+' · '+fullDate(s.draft.date)+' · '+s.review.length+(s.review.length===1?' item':' items'),lowConf:s.lowConf,reviewItems,
+      reviewKcal:fmt(rk.kcal),reviewMacros:'Protein '+Math.round(rk.p)+' g · Fat '+Math.round(rk.f)+' g · Carbs '+Math.round(rk.c)+' g',
+      noteOpen:s.noteOpen,noteBtnLabel:s.noteOpen?'Cancel note':'Add a note & re-run',toggleNote:()=>S(st=>({noteOpen:!st.noteOpen})),
+      reNote:s.reNote,setReNote:e=>S({reNote:e.target.value}),
+      reRun:()=>{const n=parseInt((s.reNote.match(/\d+/)||[])[0]);S(st=>({draft:{...st.draft,text:st.draft.text+(st.reNote?'\n'+st.reNote:'')},reNote:'',noteOpen:false}));this.setState({screen:'analyzing',step:0});clearInterval(this.iv);this.iv=setInterval(()=>this.setState(x=>({step:(x.step+1)%STEPS.length})),900);this.t=setTimeout(()=>{clearInterval(this.iv);const items=recognized(false).map(it=>it.src==='estimated'&&n&&it.name.includes('beef')?{...this.scaleItem(it,n),hint:'from your note'}:it);this.setState({screen:'review',review:items,lowConf:false})},2600)},
+      confirmSave:()=>{if(!s.review.length){this.showToast('Nothing to save');return}
+        const items=s.review.map(it=>({id:nid(),name:it.name,amount:+it.amount||0,kcal:+it.kcal||0,p:+it.p||0,f:+it.f||0,c:+it.c||0}));
+        const toLib=s.review.filter(it=>it.save&&!s.library.some(p=>p.name.toLowerCase()===it.name.toLowerCase())).map(it=>{const a=+it.amount||100;return P(it.name,'100',Math.round((+it.kcal||0)/a*100),r1(it.p/a*100),r1(it.f/a*100),r1(it.c/a*100))});
+        this.addItems(s.draft.date,s.draft.meal,items);
+        S(st=>({library:[...st.library,...toLib],screen:'today',date:st.draft.date,draft:{...st.draft,text:'',photos:[]},review:[],lowConf:false}));
+        this.showToast('Saved to '+s.draft.meal+(toLib.length?' · '+toLib.length+' added to library':''))},
+      // manual
+      man:{name:m.name,amount:m.amount,kcal:m.kcal,p:m.p,f:m.f,c:m.c,onName:setMan('name'),onAmount:setMan('amount'),onKcal:setMan('kcal'),onP:setMan('p'),onF:setMan('f'),onC:setMan('c')},
+      manInvalid,manBg:manInvalid?'#CFC8BD':'#6B8F71',manBtn:'Add to '+s.draft.meal,libCount:s.library.length,
+      pickFromLibrary:()=>S({screen:'library',picking:true}),backToManual:()=>S({screen:'manual',picking:false}),
+      saveManual:()=>{this.addItems(s.draft.date,s.draft.meal,[{id:nid(),name:m.name.trim(),amount:+m.amount||0,kcal:+m.kcal||0,p:+m.p||0,f:+m.f||0,c:+m.c||0}]);S(st=>({screen:'today',date:st.draft.date,man:{name:'',amount:'',kcal:'',p:'',f:'',c:''}}));this.showToast('Added to '+s.draft.meal)},
+      // library
+      libTitle:s.picking?'Pick a product':'Library',picking:s.picking,query:s.query,setQuery:e=>S({query:e.target.value}),libRows,libEmpty:!libRows.length,
+      newProduct:()=>S({sheet:{type:'product',isNew:true,draft:P('','100','','','','',false),addAmount:100,addMeal:defaultMeal()}}),
+      // week
+      weekLabel,weekIsCurrent,weekNotCurrent:!weekIsCurrent,nextWeekOpacity:weekIsCurrent?.3:1,prevWeek:()=>S(st=>({weekStart:shift(st.weekStart,-7)})),nextWeek:()=>S(st=>({weekStart:shift(st.weekStart,7)})),thisWeek:()=>S({weekStart:'2026-09-28'}),
+      weekAvg:withData.length?fmt(avg('kcal')):'—',weekSub:withData.length?withData.length+' of 7 days logged'+(hasGoal?' · goal '+fmt(s.goal):''):'No meals logged this week',
+      weekP:Math.round(avg('p')),weekF:Math.round(avg('f')),weekC:Math.round(avg('c')),bars,goalLineTop:(60+goalTop)+'px',goalLabelTop:(60+goalTop-15)+'px',goalFmt:fmt(s.goal),
+      // settings
+      goalInput:s.goal||'',setGoal:e=>S({goal:+e.target.value||0}),
+      unitsGrams:()=>S({units:'g'}),unitsPortions:()=>S({units:'portion'}),gBg:s.units==='g'?'#fff':'transparent',gInk:s.units==='g'?'#1F1D1A':'#807A72',gShadow:s.units==='g'?'0 1px 2px rgba(0,0,0,.06)':'none',pBg:s.units==='g'?'transparent':'#fff',pInk:s.units==='g'?'#807A72':'#1F1D1A',pShadow:s.units==='g'?'none':'0 1px 2px rgba(0,0,0,.06)',
+      exportMeta:Object.keys(s.days).length+' days · '+s.library.length+' products · JSON',exportData:()=>this.showToast('Exported calories-2026-10-01.json'),
+      // sheet / nav / toast
+      sheetOpen:!!s.sheet,sh,closeSheet:()=>S({sheet:null}),tabs,toast:s.toast
+    };
+  }
+}
+</script>
+</body>
+</html>
