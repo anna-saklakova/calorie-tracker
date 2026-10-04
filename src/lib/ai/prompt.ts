@@ -13,14 +13,21 @@ Return ONLY data that matches the JSON schema. Rules:
 5. Amount priority: if the user states an exact weight ("rice 175 g"), use it unchanged with amount_source "user_exact". Never replace it with your own visual estimate.
 6. If the user gives an approximate weight ("about 175 g rice", "~120 g"), use that number with amount_source "user_estimate".
 7. If the user gives a count or portion ("half a cucumber", "2 eggs", "a spoon of oil"), convert it to grams and use "user_estimate".
-8. Only if the user says nothing about the amount, estimate grams from the photo: "visual_estimate". Without a photo, assume a typical portion and use "visual_estimate".
-9. Read nutrition labels per 100 g. If the label only shows per serving and the serving size in grams is visible, convert to per 100 g. If a value is not visible or not readable, use null. Never guess label values.
-10. library_product_id: the id of the user's own product only if it is clearly the same product (same item/brand). Otherwise null.
-11. generic_food_id: the id of the closest generic food in the list below, matching the food AND its preparation (cooked vs raw). If none fits, null. Never pick a random one.
-12. estimate_per_100g: always give your best estimate of the nutrients per 100 g of the food as eaten. It is used only when there is no label, library or generic match.
-13. Do not calculate meal totals or nutrients for the eaten amount. The app does the arithmetic.
-14. Names: short and plain, in the language of the user's note (English if there is no note). brand and product_name only if visible on a package or said by the user.
-15. If no food can be identified at all (blurry, dark, not food), return an empty foods list and explain briefly in failure_reason. Otherwise failure_reason is null.
+8. Scoops, spoons, cups, ml of a powder or dry product: FIRST look for the conversion on the package ("1 Messlöffel = 15 g", "2 scoops (30 g)", serving size). If it is there, use it (amount_source "user_estimate", e.g. "2 scoops" → 30 g). Only without it use typical densities (a level scoop of protein powder ≈ 30 g; dry powder ≈ 0.5 g per ml, so 80 ml ≈ 40 g). The amount is always grams of the dry product as eaten, never the volume of the drink. Put the conversion you found into serving_size_g.
+9. Only if the user says nothing about the amount, estimate grams from the photo: "visual_estimate". Without a photo, assume a typical portion and use "visual_estimate".
+10. Reading nutrition labels — be exact, this is where mistakes cost most:
+   - Use the "per 100 g" column (German: "pro 100 g", "je 100 g"; French "pour 100 g"; Italian "per 100 g"). Labels usually have a second column per serving/portion ("pro Portion", "per serving", "pro 30 g") — do NOT take values from it. For powders and drink mixes the per-portion column is often "prepared with milk/water" and includes the milk: never use it.
+   - Energy: use the kcal value, NOT the kJ value. Labels show both, often as "1570 kJ / 372 kcal" or in two lines (German "Brennwert"). kJ is about 4.2 times bigger than kcal — if the only energy number you see is far above what the macros allow (protein and carbs give 4 kcal/g, fat 9 kcal/g), it is kJ: divide by 4.184.
+   - Rows: German "Eiweiß" = protein, "Fett" = fat, "Kohlenhydrate" = carbs, "davon Zucker" = of which sugars (not carbs), "Ballaststoffe" = fiber, "Salz" = salt. Spanish "Proteínas/Grasas/Hidratos de carbono", French "Protéines/Matières grasses/Glucides", Italian "Proteine/Grassi/Carboidrati".
+   - Protein powders have ~70–85 g protein per 100 g; whole foods never above ~35. If your reading is wildly off for the kind of product, re-read the table.
+   - If the label is only per serving and the serving size in grams is visible, convert to per 100 g. If a value is not visible or not readable, use null. Never guess label values.
+   - Only the nutrition table matters for package_data; ignore recipes and serving suggestions on the package except for the scoop/serving-size conversion in rule 8.
+11. library_product_id: the id of the user's own product only if it is clearly the same product (same item/brand). Otherwise null.
+12. generic_food_id: the id of the closest generic food in the list below, matching the food AND its preparation (cooked vs raw). If none fits, null. Never pick a random one.
+13. estimate_per_100g: always give your best estimate of the nutrients per 100 g of the food as eaten. It is used only when there is no label, library or generic match.
+14. Do not calculate meal totals or nutrients for the eaten amount. The app does the arithmetic.
+15. Names: short and plain, in the language of the user's note (English if there is no note). brand and product_name only if visible on a package or said by the user.
+16. If no food can be identified at all (blurry, dark, not food), return an empty foods list and explain briefly in failure_reason. Otherwise failure_reason is null.
 
 amount_source values: ${AMOUNT_SOURCES.join(', ')}.
 

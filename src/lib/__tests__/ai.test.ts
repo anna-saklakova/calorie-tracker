@@ -64,7 +64,7 @@ describe('meal pipeline', () => {
 
   it('ignores unreadable labels and unknown ids instead of guessing', () => {
     expect(packagePer100(label({ fat_g_per_100g: null }))).toBeNull();
-    expect(packagePer100(label({ kcal_per_100g: 2000 }))).toBeNull();
+    expect(packagePer100(label({ kcal_per_100g: 8000 }))).toMatchObject({ per100: { kcal: 183 }, energyFix: 'macros' });
     expect(packagePer100(label({ protein_g_per_100g: 60, carbs_g_per_100g: 60 }))).toBeNull();
     const meal = buildMeal({ foods: [food({ library_product_id: 'nope', generic_food_id: 'made_up' })], unmatched_package_image_ids: [], failure_reason: null }, lib);
     expect(meal.foods[0].nutrition_source).toBe('llm_estimate');
@@ -106,6 +106,34 @@ describe('schema and mapping', () => {
     const row = toReviewItem(meal.foods[0]);
     expect(row).toMatchObject({ name: 'Rinderhack (REWE Bio)', amount: 120, kcal: 224, p: 25.2, src: 'label', save: true, amountSource: 'user_exact', nutritionSource: 'package' });
     expect(row.per.kcal * 200).toBeCloseTo(374);
-    expect(row.hint).toBe('Label · your weight');
+    expect(row.hint).toBe('Label · 187 kcal/100 g · your weight');
+  });
+});
+
+describe('label energy check', () => {
+  // a German protein powder label: 1570 kJ / 375 kcal, 75 g protein, 5 g fat, 7 g carbs
+  const powder = { protein_g_per_100g: 75, fat_g_per_100g: 5, carbs_g_per_100g: 7 };
+
+  it('keeps a kcal value that matches the macros', () => {
+    expect(packagePer100(label({ ...powder, kcal_per_100g: 375 }))).toMatchObject({ per100: { kcal: 375, protein_g: 75 }, energyFix: null });
+  });
+
+  it('converts when the model picked the kJ value', () => {
+    expect(packagePer100(label({ ...powder, kcal_per_100g: 1570 }))).toMatchObject({ per100: { kcal: 375 }, energyFix: 'kj' });
+  });
+
+  it('recalculates energy from the macros when it fits neither kcal nor kJ', () => {
+    // e.g. the per-portion column (30 g) was read for energy: 112 kcal
+    expect(packagePer100(label({ ...powder, kcal_per_100g: 112 }))).toMatchObject({ per100: { kcal: 373 }, energyFix: 'macros' });
+  });
+
+  it('accepts low-energy foods with rounding noise', () => {
+    expect(packagePer100(label({ protein_g_per_100g: 0.7, fat_g_per_100g: 0.1, carbs_g_per_100g: 3.6, kcal_per_100g: 15 }))).toMatchObject({ per100: { kcal: 15 }, energyFix: null });
+  });
+
+  it('surfaces the fix on the review screen', () => {
+    const meal = buildMeal({ foods: [food({ name: 'Protein', amount_g: 30, amount_source: 'user_estimate', package_data: label({ ...powder, kcal_per_100g: 1570 }) })], unmatched_package_image_ids: [], failure_reason: null }, []);
+    expect(meal.foods[0]).toMatchObject({ energy_fix: 'kj', nutrition: { kcal: 112.5, protein_g: 22.5 } });
+    expect(toReviewItem(meal.foods[0]).hint).toBe('Label · 375 kcal/100 g · ≈ your weight');
   });
 });

@@ -72,7 +72,8 @@ export function toReviewItem(f: FinalFood): ReviewItem {
     c: r1(f.nutrition.carbs_g),
     per: { kcal: f.per100.kcal / 100, p: f.per100.protein_g / 100, f: f.per100.fat_g / 100, c: f.per100.carbs_g / 100 },
     src,
-    hint: `${NUTRITION_HINT[f.nutrition_source]}${f.nutrition_source === 'product_db' && f.matched_name ? ` · ${f.matched_name}` : ''} · ${AMOUNT_HINT[f.amount_source]}`,
+    // what the nutrients are based on (per 100 g), so a misread label is visible at a glance
+    hint: `${NUTRITION_HINT[f.nutrition_source]}${f.nutrition_source === 'product_db' && f.matched_name ? ` · ${f.matched_name}` : ''} · ${Math.round(f.per100.kcal)} kcal/100 g · ${AMOUNT_HINT[f.amount_source]}`,
     // label data is worth keeping in the library for next time
     save: f.nutrition_source === 'package',
     low: llm,
@@ -120,5 +121,7 @@ export const recognize: Recognizer = async (input, signal) => {
   if (items.some(i => i.low)) notes.push('Some nutrients are AI estimates (marked). Check them before saving.');
   if (data.meal.foods.some(f => f.amount_source === 'visual_estimate')) notes.push('Amounts marked ~ are judged from the photo.');
   if (data.meal.unmatched_package_image_ids.length) notes.push('A label photo couldn’t be tied to a food, so it wasn’t used.');
+  if (data.meal.foods.some(f => f.energy_fix === 'kj')) notes.push('A label listed energy in kJ; it was converted to kcal.');
+  if (data.meal.foods.some(f => f.energy_fix === 'macros')) notes.push('A label’s calories didn’t match its protein, fat and carbs, so they were recalculated from those. Check the label values.');
   return { status: 'ok', items, notes };
 };

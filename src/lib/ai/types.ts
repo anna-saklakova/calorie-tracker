@@ -90,6 +90,8 @@ export interface FinalFood {
   per100: Per100;
   /** library product or generic food the nutrients came from */
   matched_name: string | null;
+  /** set when the label's energy value didn't match its macros: 'kj' = it was kJ and got converted, 'macros' = replaced by the energy the macros imply */
+  energy_fix: 'kj' | 'macros' | null;
 }
 
 export interface FinalMeal {
