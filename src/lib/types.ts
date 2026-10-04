@@ -83,6 +83,8 @@ export interface ReviewItem extends Item {
   save: boolean;
   low?: boolean;
   lowNote?: string;
+  /** how the grams were obtained, shown under the source chip */
+  amountNote?: string;
   /** per-gram values so editing the amount rescales the macros */
   per: Macros;
 }

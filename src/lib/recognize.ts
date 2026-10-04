@@ -78,6 +78,7 @@ export function toReviewItem(f: FinalFood): ReviewItem {
     save: f.nutrition_source === 'package',
     low: llm,
     lowNote: llm ? 'No label or match found · nutrients are an AI estimate' : undefined,
+    amountNote: f.amount_basis ?? undefined,
     amountSource: f.amount_source,
     nutritionSource: f.nutrition_source
   };

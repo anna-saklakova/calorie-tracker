@@ -107,6 +107,7 @@ export function buildMeal(meal: IntermediateMeal, libraryEntries: LibraryEntry[]
         product_name: f.product_name ?? f.package_data?.product_name ?? null,
         amount_g: amount,
         amount_source: amountSource,
+        amount_basis: typeof f.amount_basis === 'string' && f.amount_basis.trim() ? f.amount_basis.trim().slice(0, 120) : null,
         nutrition: nutrientsFor(per100, amount),
         nutrition_source: source,
         per100,

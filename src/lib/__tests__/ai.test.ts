@@ -12,6 +12,7 @@ const food = (over: Partial<IntermediateFood>): IntermediateFood => ({
   product_name: null,
   amount_g: 100,
   amount_source: 'visual_estimate',
+  amount_basis: null,
   package_data: null,
   library_product_id: null,
   generic_food_id: null,
@@ -135,5 +136,14 @@ describe('label energy check', () => {
     const meal = buildMeal({ foods: [food({ name: 'Protein', amount_g: 30, amount_source: 'user_estimate', package_data: label({ ...powder, kcal_per_100g: 1570 }) })], unmatched_package_image_ids: [], failure_reason: null }, []);
     expect(meal.foods[0]).toMatchObject({ energy_fix: 'kj', nutrition: { kcal: 112.5, protein_g: 22.5 } });
     expect(toReviewItem(meal.foods[0]).hint).toBe('Label · 375 kcal/100 g · ≈ your weight');
+  });
+});
+
+describe('amount basis', () => {
+  it('passes the conversion explanation through to the review row', () => {
+    const meal = buildMeal({ foods: [food({ name: 'Protein', amount_g: 30, amount_source: 'user_exact', amount_basis: '  2 scoops × 15 g (package)  ', generic_food_id: null })], unmatched_package_image_ids: [], failure_reason: null }, []);
+    expect(meal.foods[0].amount_basis).toBe('2 scoops × 15 g (package)');
+    expect(toReviewItem(meal.foods[0]).amountNote).toBe('2 scoops × 15 g (package)');
+    expect(buildMeal({ foods: [food({ amount_basis: '' })], unmatched_package_image_ids: [], failure_reason: null }, []).foods[0].amount_basis).toBeNull();
   });
 });
