@@ -24,7 +24,13 @@
 3. **Billing** (на уровне организации): OpenAI списывает деньги с предоплаченного баланса. Держи **Auto recharge выключенным**. Тогда расход физически не превысит пополненную сумму.
 4. **API keys → Create new secret key**:
    - Project: `Calorie tracker`
-   - Permissions: **Restricted**. Доступ на запись нужен только тому, что вызывает модели (Responses и Audio / Model capabilities), остальное None. Если что-то не будет работать из-за прав, временно поставь All и напиши мне.
+   - Permissions: **Restricted**, дальше по списку:
+     - **Models** → `Read` (если такой пункт есть: список моделей);
+     - **Model capabilities** → `Request`. Обязательно, именно это даёт право вызывать модели, в том числе `/v1/audio/transcriptions`. Выставь его **первым**: без него запросы падают с ошибкой `missing scope model.request`, даже если остальное включено;
+     - **Responses API** → `Write` (если предлагается отдельно Read/Write, включи оба);
+     - всё остальное (Assistants, Threads, Files, Vector stores, Fine-tuning, Batch, Evals, Realtime и т.д.) → `None`.
+     
+     Если после деплоя в Vercel → Logs видна ошибка `401` или `403` от OpenAI, значит, каких-то прав не хватает. Пришли мне эту строку.
    - Скопируй ключ. Он показывается один раз.
 
 ## 2. Положить ключ в Vercel
