@@ -1,4 +1,4 @@
-import { ChevronLeft, SearchIcon, Star } from '../components/icons';
+import { ChevronLeft, SearchIcon } from '../components/icons';
 import type { Product } from '../lib/types';
 
 interface Props {
@@ -9,15 +9,14 @@ interface Props {
   onBack: () => void;
   onNew: () => void;
   onOpen: (p: Product) => void;
-  onToggleFav: (p: Product) => void;
 }
 
 export const productMeta = (p: Product) =>
   `${p.basis === '100' ? 'per 100 g' : `per portion · ${p.portion} g`} · ${p.kcal} kcal · P ${p.p} F ${p.f} C ${p.c}`;
 
-export function Library({ library, query, setQuery, picking, onBack, onNew, onOpen, onToggleFav }: Props) {
+export function Library({ library, query, setQuery, picking, onBack, onNew, onOpen }: Props) {
   const q = query.trim().toLowerCase();
-  const rows = [...library].sort((a, b) => +b.fav - +a.fav || a.name.localeCompare(b.name)).filter(p => !q || p.name.toLowerCase().includes(q));
+  const rows = [...library].sort((a, b) => a.name.localeCompare(b.name)).filter(p => !q || p.name.toLowerCase().includes(q));
 
   return (
     <div className="screen fade">
@@ -53,12 +52,9 @@ export function Library({ library, query, setQuery, picking, onBack, onNew, onOp
           <div className="card">
             {rows.map((p, i) => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', borderTop: i ? '1px solid var(--line-soft)' : 'none' }}>
-                <button className="row-btn" onClick={() => onOpen(p)} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '14px 0 14px 16px', border: 'none', background: 'transparent', textAlign: 'left' }}>
+                <button className="row-btn" onClick={() => onOpen(p)} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '14px 16px', border: 'none', background: 'transparent', textAlign: 'left' }}>
                   <span className="row-name" style={{ maxWidth: '100%' }}>{p.name}</span>
                   <span className="num" style={{ fontSize: 13, color: 'var(--muted)' }}>{productMeta(p)}</span>
-                </button>
-                <button onClick={() => onToggleFav(p)} aria-label={p.fav ? 'Remove from favourites' : 'Mark as favourite'} aria-pressed={p.fav} style={{ width: 48, height: 56, border: 'none', background: 'transparent', display: 'grid', placeItems: 'center', flex: 'none' }}>
-                  <Star on={p.fav} />
                 </button>
               </div>
             ))}

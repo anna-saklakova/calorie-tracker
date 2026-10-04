@@ -50,7 +50,7 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
           <div className="row">
             <div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>Daily goal</div>
-              <div className="row-sub">Leave empty to hide the ring</div>
+              <div className="row-sub">From today on · past days keep theirs</div>
             </div>
             <div className="input-wrap">
               <NumInput

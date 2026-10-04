@@ -82,7 +82,7 @@ export function MacroCards({ data, showTags }: { data: Record<MacroKey, MacroCar
   return (
     <div className="macros">
       {MACRO_KEYS.map(k => (
-        <div key={k} className={`macro ${k}`}>
+        <div key={k} className={`macro ${showTags ? data[k].tag : 'none'}`}>
           <div className="macro-name">{MACRO_NAME[k]}</div>
           <div className="macro-val">
             {data[k].pct}

@@ -43,7 +43,7 @@ describe('nutrition', () => {
   });
 
   it('converts product amounts for 100 g and portion bases', () => {
-    const base = { id: 'x', name: 'x', fav: false, updatedAt: 0, kcal: 200, p: 10, f: 5, c: 30 };
+    const base = { id: 'x', name: 'x', updatedAt: 0, kcal: 200, p: 10, f: 5, c: 30 };
     expect(productPortion({ ...base, basis: '100', portion: 100 } as Product, 50)).toMatchObject({ grams: 50, kcal: 100, portions: undefined });
     expect(productPortion({ ...base, basis: 'portion', portion: 120 } as Product, 2)).toMatchObject({ grams: 240, kcal: 400, portions: 2 });
   });
@@ -62,7 +62,7 @@ describe('dates', () => {
 });
 
 describe('sync merge', () => {
-  const p = (id: string, updatedAt: number, extra: Partial<Product> = {}): Product => ({ id, name: id, basis: '100', portion: 100, kcal: 1, p: 0, f: 0, c: 0, fav: false, updatedAt, ...extra });
+  const p = (id: string, updatedAt: number, extra: Partial<Product> = {}): Product => ({ id, name: id, basis: '100', portion: 100, kcal: 1, p: 0, f: 0, c: 0, updatedAt, ...extra });
   const d = (days: Data['days'], library: Product[], at = 0): Data => ({ days, library, settings: { ...defaultSettings(), updatedAt: at } });
 
   it('keeps the newer day and product, and tombstones win when newer', () => {
