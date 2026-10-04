@@ -27,9 +27,11 @@ export interface SyncState {
   data: DataStatus;
   save: SaveStatus;
   lastSaved: number | null;
+  /** what went wrong when loading failed, shown on the error screen */
+  loadError: string;
 }
 
-let state: SyncState = { user: null, authLoading: !!supabase, recovery: false, data: 'idle', save: 'saved', lastSaved: null };
+let state: SyncState = { user: null, authLoading: !!supabase, recovery: false, data: 'idle', save: 'saved', lastSaved: null, loadError: '' };
 const listeners = new Set<(s: SyncState) => void>();
 const set = (patch: Partial<SyncState>) => {
   state = { ...state, ...patch };
@@ -64,7 +66,7 @@ async function load() {
   const gen = ++generation;
   clearTimeout(timer);
   dirty = false;
-  set({ data: 'loading', save: 'saved' });
+  set({ data: 'loading', save: 'saved', loadError: '' });
   try {
     let remote = await fetchRemote(user.id);
     if (gen !== generation) return;
@@ -78,7 +80,7 @@ async function load() {
   } catch (e) {
     if (gen !== generation) return;
     console.error('load failed', e);
-    set({ data: 'error' });
+    set({ data: 'error', loadError: (e as { message?: string })?.message ?? String(e) });
   }
 }
 

@@ -193,7 +193,12 @@ export default function App() {
       }}
     />
   ) : sync.data === 'error' ? (
-    <AuthState title="Couldn’t load your data" body="Check your connection and try again." action={{ label: 'Try again', onClick: reload }} />
+    <AuthState
+      title="Couldn’t load your data"
+      body={`Check your connection and try again.${sync.loadError ? `\nDetails: ${sync.loadError}` : ''}`}
+      action={{ label: 'Try again', onClick: reload }}
+      secondary={{ label: 'Sign out', onClick: () => signOut() }}
+    />
   ) : sync.data !== 'ready' ? (
     <AuthState title="Loading your data…" />
   ) : null;
