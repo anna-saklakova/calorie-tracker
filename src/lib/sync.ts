@@ -2,15 +2,19 @@ import { useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { clearData, getData, onEdit, setData } from './store';
-import { mergeData, sameData } from './merge';
+import { fetchDays, fetchProducts, fetchSettings, saveRecords } from './remote';
+import type { DayRow, LegacyDoc, ProductRow } from './remote';
+import { emptyBase, takeRemote, unsavedRecords } from './merge';
+import type { Base } from './merge';
 import { defaultSettings, emptyData } from './types';
-import type { Data } from './types';
+import type { Data, Settings } from './types';
 
 /**
- * The user's data lives only in Supabase (one `user_data` row per account).
- * After sign-in it is loaded into memory; every edit is saved back shortly after.
- * Before each save the cloud copy is read and merged record by record (newer updatedAt wins),
- * so two open devices don't overwrite each other.
+ * The user's data lives only in Supabase: one row per day and per library product, plus a settings row.
+ * After sign-in everything is loaded into memory. Each edit is saved shortly after, sending only the
+ * records that changed; the database keeps the newer version of each record, so two open devices don't
+ * overwrite each other. After saving, and when the app comes back to the foreground, only rows changed
+ * since the last pull are fetched.
  */
 
 /** idle: signed out · loading: fetching the cloud copy · ready: loaded · error: couldn't load */
@@ -40,25 +44,54 @@ const set = (patch: Partial<SyncState>) => {
 
 export const endRecovery = () => set({ recovery: false });
 
-const normalize = (d: Partial<Data> | null | undefined): Data | null =>
-  d ? { days: d.days ?? {}, library: d.library ?? [], settings: { ...defaultSettings(), ...d.settings } } : null;
-
-async function fetchRemote(userId: string): Promise<Data | null> {
-  const { data: row, error } = await supabase!.from('user_data').select('data').eq('user_id', userId).maybeSingle();
-  if (error) throw error;
-  return normalize(row?.data as Partial<Data> | undefined);
-}
-
-async function writeRemote(userId: string, d: Data) {
-  const { error } = await supabase!.from('user_data').upsert({ user_id: userId, data: d, updated_at: new Date().toISOString() });
-  if (error) throw error;
-}
-
 /** bumps on every sign-in/out so results of an older request are dropped */
 let generation = 0;
 let dirty = false;
 let saving = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
+
+let base: Base = emptyBase();
+/** server time of the newest change seen; the next pull asks only for changes after it */
+let cursor: string | null = null;
+/** re-read a little before the cursor, in case a change committed slightly out of order */
+const OVERLAP_MS = 5000;
+
+const resetBase = () => {
+  base = emptyBase();
+  cursor = null;
+};
+
+const hasUnsaved = (d: Data) => {
+  const u = unsavedRecords(d, base);
+  return u.days.length > 0 || u.products.length > 0 || !!u.settings;
+};
+
+function applyRemote(days: DayRow[], products: ProductRow[], settings: Settings | null) {
+  const before = getData();
+  const { data, latest } = takeRemote(before, base, days, products, settings);
+  if (latest && (!cursor || latest > cursor)) cursor = latest;
+  if (data !== before) setData(data);
+}
+
+/**
+ * Data saved by an older app version as one document: write its records into the tables
+ * (the database keeps whichever copy of each is newer) and reduce the document to settings.
+ */
+async function migrateLegacy(legacy: LegacyDoc, settings: Settings) {
+  await saveRecords(Object.entries(legacy.days), legacy.library, settings);
+  cursor = null; // re-read everything once
+}
+
+/** Fetches what changed in the cloud since the last pull and takes it in. */
+async function pull(userId: string, gen: number) {
+  const s = await fetchSettings(userId);
+  if (gen !== generation) return;
+  if (s.legacy) await migrateLegacy(s.legacy, s.settings ?? defaultSettings());
+  const since = cursor ? new Date(Date.parse(cursor) - OVERLAP_MS).toISOString() : null;
+  const [days, products] = await Promise.all([fetchDays(userId, since), fetchProducts(userId, since)]);
+  if (gen !== generation) return;
+  applyRemote(days, products, s.settings);
+}
 
 async function load() {
   const user = state.user;
@@ -66,16 +99,20 @@ async function load() {
   const gen = ++generation;
   clearTimeout(timer);
   dirty = false;
+  resetBase();
   set({ data: 'loading', save: 'saved', loadError: '' });
   try {
-    let remote = await fetchRemote(user.id);
+    const remote = await fetchSettings(user.id);
     if (gen !== generation) return;
-    if (!remote) {
-      remote = emptyData();
-      await writeRemote(user.id, remote);
-      if (gen !== generation) return;
-    }
-    setData(remote);
+    const settings = remote.settings ?? defaultSettings();
+    // older app versions kept everything in one document; a brand-new account has no settings row yet
+    if (remote.legacy) await migrateLegacy(remote.legacy, settings);
+    else if (!remote.settings) await saveRecords([], [], settings);
+    const [days, products] = await Promise.all([fetchDays(user.id, null), fetchProducts(user.id, null)]);
+    if (gen !== generation) return;
+    setData({ ...emptyData(), settings });
+    base.settings = settings.updatedAt;
+    applyRemote(days, products, null);
     set({ data: 'ready', lastSaved: Date.now() });
   } catch (e) {
     if (gen !== generation) return;
@@ -87,7 +124,7 @@ async function load() {
 /** Retry after a failed load. */
 export const reload = () => load();
 
-/** Merges the cloud copy into memory and, if there are unsaved edits, writes the result back. */
+/** Saves records changed here, then takes in what changed elsewhere. */
 async function syncNow(): Promise<void> {
   const user = state.user;
   if (!user || state.data !== 'ready') return;
@@ -98,18 +135,22 @@ async function syncNow(): Promise<void> {
   dirty = false;
   if (hadEdits) set({ save: 'saving' });
   try {
-    const remote = await fetchRemote(user.id);
+    const u = unsavedRecords(getData(), base);
+    await saveRecords(u.days, u.products, u.settings);
     if (gen !== generation) return;
-    // merge with what's in memory now, so edits made while we waited are kept
-    const merged = remote ? mergeData(getData(), remote) : getData();
-    if (!sameData(merged, getData())) setData(merged);
-    if (!remote || !sameData(merged, remote)) await writeRemote(user.id, merged);
+    // the cloud now has these versions (or newer ones, which the pull brings in)
+    for (const [date, day] of u.days) base.days.set(date, Math.max(base.days.get(date) ?? -1, day.updatedAt));
+    for (const p of u.products) base.products.set(p.id, Math.max(base.products.get(p.id) ?? -1, p.updatedAt));
+    if (u.settings) base.settings = Math.max(base.settings, u.settings.updatedAt);
+    await pull(user.id, gen);
     if (gen !== generation) return;
+    dirty = dirty || hasUnsaved(getData());
     set({ save: dirty ? 'pending' : 'saved', lastSaved: Date.now() });
+    if (dirty) schedule();
   } catch (e) {
     if (gen !== generation) return;
     console.error('save failed', e);
-    dirty = dirty || hadEdits;
+    dirty = dirty || hadEdits || hasUnsaved(getData());
     set({ save: dirty ? (navigator.onLine ? 'error' : 'offline') : state.save });
     if (dirty) schedule(navigator.onLine ? 10000 : 5000);
   } finally {
@@ -127,18 +168,14 @@ export async function flush(): Promise<boolean> {
   clearTimeout(timer);
   while (saving) await new Promise(r => setTimeout(r, 100));
   await syncNow();
-  return !dirty;
+  return !dirty && !hasUnsaved(getData());
 }
 
-/** The latest cloud copy, merged with anything not yet saved. Throws if the cloud can't be reached. */
+/** Everything, up to date with the cloud. Throws if the cloud can't be reached. */
 export async function fetchLatest(): Promise<Data> {
-  const user = state.user;
-  if (!user) throw new Error('Not signed in');
+  if (!state.user) throw new Error('Not signed in');
   if (!(await flush())) throw new Error('Not saved');
-  const remote = await fetchRemote(user.id);
-  const merged = remote ? mergeData(getData(), remote) : getData();
-  if (!sameData(merged, getData())) setData(merged);
-  return merged;
+  return getData();
 }
 
 function onUser(user: User | null) {

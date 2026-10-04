@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { balanceTag, macroPct, macroTargets, scaleItem, fmt, sumMacros } from '../nutrition';
 import { dayLabel, shift, weekStartOf, weekLabel } from '../dates';
-import { mergeData } from '../merge';
 import { authErrorText } from '../supabase';
 import { productPortion } from '../../components/Sheet';
-import { defaultSettings } from '../types';
-import type { Data, Product } from '../types';
+import type { Product } from '../types';
 
 describe('nutrition', () => {
   it('formats with a thin space', () => {
@@ -58,21 +56,6 @@ describe('dates', () => {
     expect(weekStartOf('2026-09-28')).toBe('2026-09-28');
     expect(weekLabel('2026-09-28')).toBe('28 Sep – 4 Oct');
     expect(shift('2026-12-31', 1)).toBe('2027-01-01');
-  });
-});
-
-describe('sync merge', () => {
-  const p = (id: string, updatedAt: number, extra: Partial<Product> = {}): Product => ({ id, name: id, basis: '100', portion: 100, kcal: 1, p: 0, f: 0, c: 0, updatedAt, ...extra });
-  const d = (days: Data['days'], library: Product[], at = 0): Data => ({ days, library, settings: { ...defaultSettings(), updatedAt: at } });
-
-  it('keeps the newer day and product, and tombstones win when newer', () => {
-    const local = d({ '2026-10-01': { meals: [], updatedAt: 5 }, '2026-09-30': { meals: [], updatedAt: 9 } }, [p('a', 1), p('b', 5)], 3);
-    const remote = d({ '2026-10-01': { meals: [{ id: 'm', type: 'Lunch', items: [] }], updatedAt: 7 }, '2026-09-29': { meals: [], updatedAt: 1 } }, [p('a', 2, { deleted: true }), p('c', 1)], 1);
-    const m = mergeData(local, remote);
-    expect(Object.keys(m.days).sort()).toEqual(['2026-09-29', '2026-09-30', '2026-10-01']);
-    expect(m.days['2026-10-01'].meals).toHaveLength(1);
-    expect(m.library.map(x => [x.id, !!x.deleted])).toEqual([['a', true], ['b', false], ['c', false]]);
-    expect(m.settings.updatedAt).toBe(3);
   });
 });
 

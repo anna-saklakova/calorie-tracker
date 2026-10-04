@@ -41,8 +41,8 @@ The OpenAI key lives only in the Vercel environment (`OPENAI_API_KEY`, Sensitive
 
 ### How data is stored
 
-- The cloud is the only copy: one `user_data` row per account. After sign-in the app loads it into memory and shows nothing until it has arrived.
-- Each edit is saved about 0.8 s later. Before writing, the app reads the cloud copy and merges per record (each day, each product and the settings keep the newer `updatedAt`; deleted products stay as tombstones), so two open devices don't overwrite each other. It also pulls fresh data when the app comes back to the foreground or back online.
+- The cloud is the only copy: one row per day (`user_days`) and per library product (`user_products`), plus the settings in `user_data` (`supabase/migrations/20261006000000_per_record_storage.sql`). After sign-in the app loads everything into memory and shows nothing until it has arrived.
+- Each edit is saved about 0.8 s later, sending only the records that changed, in one call to `save_records`. The database keeps the newer version of each record (by the app's `updatedAt`; deleted products stay as tombstones), so two open devices don't overwrite each other. After saving, and when the app comes back to the foreground or online, it fetches only rows changed since the last pull. Data saved by older versions as one document in `user_data` is moved into the tables automatically.
 - With no connection, Settings shows "Not saved · no connection, retrying" and the browser warns before closing the tab with unsaved edits.
 - The browser keeps only the Supabase sign-in session. Signing out clears the data from memory. Older versions kept a local copy (`ct.data.v1`); it is deleted on start.
 
@@ -61,7 +61,9 @@ src/
   screens/             SignIn, Today, AddMeal, Flow (Recognizing/Review/Failed/Manual), Library, Week, Settings
   lib/
     store.ts           in-memory data and mutations (no device storage)
-    sync.ts, merge.ts  loading and saving to Supabase
+    sync.ts            loading, saving and pulling changes
+    remote.ts          database calls (rows, save_records)
+    merge.ts           per-record conflict rules (newer wins), unsaved-record tracking
     supabase.ts        client and auth (password, Google, reset)
     nutrition.ts       totals, macro % of calories, goal tags (On track ≤3 pts, Acceptable ≤8, else Off balance)
     recognize.ts       calls /api/recognize, maps the result to Review rows
