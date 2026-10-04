@@ -7,8 +7,8 @@ import { defaultMeal, r1, scaleItem } from './lib/nutrition';
 import { recognize } from './lib/recognize';
 import * as store from './lib/store';
 import { useData } from './lib/store';
-import { signOut, syncAvailable } from './lib/supabase';
-import { useSync } from './lib/sync';
+import { authAvailable, signOut, urlAuthError } from './lib/supabase';
+import { endRecovery, fetchLatest, flush, reload, useSync } from './lib/sync';
 import { uid } from './lib/types';
 import type { Item, Meal, MealType, Photo, PhotoKind, Product, ReviewItem } from './lib/types';
 import { AddMeal } from './screens/AddMeal';
@@ -16,11 +16,11 @@ import { Analyzing, emptyManual, Failed, Manual, Review } from './screens/Flow';
 import type { ManualForm } from './screens/Flow';
 import { Library } from './screens/Library';
 import { Settings } from './screens/Settings';
-import { SignIn } from './screens/SignIn';
+import { AuthState, SetPassword, SignIn } from './screens/SignIn';
 import { Today } from './screens/Today';
 import { Week } from './screens/Week';
 
-type Screen = 'signin' | 'today' | 'add' | 'analyzing' | 'review' | 'failed' | 'manual' | 'library' | 'week' | 'settings';
+type Screen = 'today' | 'add' | 'analyzing' | 'review' | 'failed' | 'manual' | 'library' | 'week' | 'settings' | 'password';
 const TABS: [Screen, string][] = [['today', 'Today'], ['week', 'Week'], ['library', 'Library']];
 
 export interface Draft {
@@ -41,7 +41,7 @@ export default function App() {
   const today = todayIso();
   const library = store.liveLibrary(data);
 
-  const [screen, setScreen] = useState<Screen>(() => (syncAvailable && !store.getPrefs().onboarded ? 'signin' : 'today'));
+  const [screen, setScreen] = useState<Screen>('today');
   const [date, setDate] = useState(today);
   const [datePick, setDatePick] = useState(false);
   const [draft, setDraft] = useState<Draft>({ date: today, meal: defaultMeal(), text: '', photos: [] });
@@ -67,16 +67,15 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(null), undo ? 4000 : 2400);
   }, []);
 
-  // Once a session appears (e.g. back from the Google redirect or the email link), leave the sign-in screen.
+  // A new account starts on Today, with nothing left over from the previous one.
   useEffect(() => {
-    if (sync.user) {
-      store.setPrefs({ onboarded: true });
-      if (screen === 'signin') {
-        go('today');
-        showToast('Signed in · syncing');
-      }
-    }
-  }, [sync.user]);
+    go('today');
+    setDate(todayIso());
+    setSheet(null);
+    setPicking(false);
+    setReview([]);
+    setDraft(d => (clearPhotos(d.photos), { date: todayIso(), meal: defaultMeal(), text: '', photos: [] }));
+  }, [sync.user?.id]);
 
   // Android back button / browser back: close the sheet or step back instead of leaving the app.
   const backRef = useRef<() => boolean>(() => false);
@@ -84,6 +83,7 @@ export default function App() {
     if (sheet) return setSheet(null), true;
     if (screen === 'analyzing') return cancelAnalyze(), true;
     if (screen === 'review' || screen === 'failed' || screen === 'manual') return go(picking ? 'manual' : 'add'), true;
+    if (screen === 'password') return go('settings'), true;
     if (screen === 'add' || screen === 'settings' || screen === 'week' || screen === 'library') {
       if (picking) return setPicking(false), go('manual'), true;
       return go('today'), true;
@@ -177,19 +177,43 @@ export default function App() {
   };
 
   // ── Render ────────────────────────────────────────────────
+  // Nothing of the app is shown until the user is signed in and their data has come from the cloud.
+  const gate = !authAvailable ? (
+    <AuthState title="Sign-in isn’t set up" body="This build has no Supabase settings. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY and deploy again." />
+  ) : sync.authLoading ? (
+    <AuthState title="Loading…" />
+  ) : !sync.user ? (
+    <SignIn initialError={urlAuthError} />
+  ) : sync.recovery ? (
+    <SetPassword
+      email={sync.user.email ?? ''}
+      onDone={() => {
+        endRecovery();
+        showToast('Password saved');
+      }}
+    />
+  ) : sync.data === 'error' ? (
+    <AuthState title="Couldn’t load your data" body="Check your connection and try again." action={{ label: 'Try again', onClick: reload }} />
+  ) : sync.data !== 'ready' ? (
+    <AuthState title="Loading your data…" />
+  ) : null;
+
+  if (gate)
+    return (
+      <div className="app">
+        {gate}
+        {toast && (
+          <div className="toast" role="status" style={{ bottom: 'calc(100px + var(--safe-b))' }}>
+            <span>{toast.msg}</span>
+          </div>
+        )}
+      </div>
+    );
+
   const showNav = (screen === 'today' || screen === 'week' || screen === 'library') && !picking;
 
   return (
     <div className="app">
-      {screen === 'signin' && (
-        <SignIn
-          onSkip={() => {
-            store.setPrefs({ onboarded: true });
-            go('today');
-          }}
-          onError={showToast}
-        />
-      )}
 
       {screen === 'today' && (
         <Today
@@ -301,12 +325,31 @@ export default function App() {
           data={data}
           sync={sync}
           onBack={() => go('today')}
-          onSignIn={() => go('signin')}
+          onPassword={() => go('password')}
           onSignOut={async () => {
+            const saved = await flush();
+            if (!saved && !confirm('Your latest changes aren’t saved yet (no connection). Sign out and lose them?')) return;
             await signOut();
-            showToast('Signed out · data stays on this phone');
+            showToast('Signed out');
           }}
-          onExport={() => showToast(`Exported ${store.exportJson()}`)}
+          onExport={async () => {
+            try {
+              showToast(`Exported ${store.exportJson(await fetchLatest())}`);
+            } catch {
+              showToast('Couldn’t reach your account. Check your connection');
+            }
+          }}
+        />
+      )}
+
+      {screen === 'password' && (
+        <SetPassword
+          email={sync.user?.email ?? ''}
+          onBack={() => go('settings')}
+          onDone={() => {
+            go('settings');
+            showToast('Password saved');
+          }}
         />
       )}
 

@@ -1,44 +1,27 @@
 import { useSyncExternalStore } from 'react';
-import { emptyData, defaultSettings, MEAL_ORDER, uid } from './types';
+import { emptyData, MEAL_ORDER, uid } from './types';
 import type { Data, Day, Item, MealType, Product, Settings } from './types';
 
-const KEY = 'ct.data.v1';
-const PREFS_KEY = 'ct.prefs.v1';
-
-function load(): Data {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return emptyData();
-    const d = JSON.parse(raw) as Partial<Data>;
-    return { days: d.days ?? {}, library: d.library ?? [], settings: { ...defaultSettings(), ...d.settings } };
-  } catch {
-    return emptyData();
-  }
-}
-
-let data: Data = typeof localStorage !== 'undefined' ? load() : emptyData();
+// Nothing is kept on the device: the data lives in Supabase (see sync.ts) and only in memory here.
+let data: Data = emptyData();
 const listeners = new Set<() => void>();
+const editListeners = new Set<() => void>();
 
 export const getData = () => data;
 
-/** Replace everything (used by sync). Does not bump timestamps. */
-export function replaceData(next: Data) {
+/** Replace everything with what came from the cloud. Not an edit, so it doesn't trigger a save. */
+export function setData(next: Data) {
   data = next;
-  persist();
-}
-
-function persist() {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(data));
-  } catch {
-    /* storage full or unavailable: keep in memory */
-  }
   listeners.forEach(l => l());
 }
 
+/** Forget the signed-out user's data. */
+export const clearData = () => setData(emptyData());
+
 function update(fn: (d: Data) => Data) {
   data = fn(data);
-  persist();
+  listeners.forEach(l => l());
+  editListeners.forEach(l => l());
 }
 
 export function subscribe(l: () => void) {
@@ -46,7 +29,23 @@ export function subscribe(l: () => void) {
   return () => listeners.delete(l);
 }
 
+/** Called after every user edit, so the cloud copy gets saved. */
+export function onEdit(l: () => void) {
+  editListeners.add(l);
+  return () => editListeners.delete(l);
+}
+
 export const useData = () => useSyncExternalStore(subscribe, getData, getData);
+
+/** Earlier versions kept a copy of the data on the device. Remove it so it can't come back. */
+export function clearLegacyStorage() {
+  try {
+    localStorage.removeItem('ct.data.v1');
+    localStorage.removeItem('ct.prefs.v1');
+  } catch {
+    /* storage unavailable: nothing to clear */
+  }
+}
 
 // ── Mutations ───────────────────────────────────────────────
 
@@ -112,31 +111,9 @@ export function updateSettings(patch: Partial<Settings>) {
 
 export const liveLibrary = (d: Data) => d.library.filter(p => !p.deleted);
 
-// ── Device-only preferences (not synced) ────────────────────
-
-interface Prefs {
-  /** the sign-in screen was answered once (signed in or skipped) */
-  onboarded: boolean;
-}
-
-export function getPrefs(): Prefs {
-  try {
-    return { onboarded: false, ...JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') };
-  } catch {
-    return { onboarded: false };
-  }
-}
-
-export function setPrefs(p: Partial<Prefs>) {
-  try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ ...getPrefs(), ...p }));
-  } catch {
-    /* ignore */
-  }
-}
-
-export function exportJson() {
-  const blob = new Blob([JSON.stringify({ ...data, library: liveLibrary(data), exportedAt: new Date().toISOString() }, null, 2)], {
+/** Downloads the given data (fetched fresh from the cloud) as a JSON file. */
+export function exportJson(d: Data) {
+  const blob = new Blob([JSON.stringify({ ...d, library: liveLibrary(d), exportedAt: new Date().toISOString() }, null, 2)], {
     type: 'application/json'
   });
   const name = `calories-${new Date().toISOString().slice(0, 10)}.json`;

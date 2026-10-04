@@ -1,0 +1,16 @@
+<!-- Subject: Confirm your Calorie tracker account -->
+<!-- Paste into Supabase → Authentication → Emails → Templates → "Confirm signup" -->
+<div style="background:#FAF3EE;padding:32px 16px;font-family:Manrope,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#2B2224">
+  <div style="max-width:440px;margin:0 auto;background:#FFFFFF;border-radius:24px;padding:32px 28px">
+    <div style="width:44px;height:44px;border-radius:14px;background:#6B8F71;color:#FFFFFF;font-size:22px;font-weight:700;line-height:44px;text-align:center">C</div>
+    <h1 style="font-size:24px;line-height:1.2;margin:24px 0 8px;font-weight:600">Confirm your email</h1>
+    <p style="font-size:16px;line-height:1.5;color:#6A5A5A;margin:0 0 24px">
+      You’re creating a Calorie tracker account for {{ .Email }}. Tap the button to confirm it and start logging.
+    </p>
+    <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#6B8F71;color:#FFFFFF;text-decoration:none;font-size:16px;font-weight:600;padding:14px 24px;border-radius:16px">Confirm email</a>
+    <p style="font-size:13px;line-height:1.5;color:#8A7670;margin:24px 0 0">
+      If you didn’t sign up for Calorie tracker, ignore this email. No account is created until the address is confirmed.
+    </p>
+  </div>
+  <p style="max-width:440px;margin:16px auto 0;font-size:12px;color:#B09A93;text-align:center">Calorie tracker</p>
+</div>

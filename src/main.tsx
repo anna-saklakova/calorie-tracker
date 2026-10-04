@@ -6,8 +6,10 @@ import '@fontsource/manrope/600.css';
 import '@fontsource/manrope/700.css';
 import './styles.css';
 import App from './App';
+import { clearLegacyStorage } from './lib/store';
 import { startSync } from './lib/sync';
 
+clearLegacyStorage();
 startSync();
 
 createRoot(document.getElementById('root')!).render(

@@ -5,21 +5,20 @@ import { macroTargets } from '../lib/nutrition';
 import { liveLibrary, updateSettings } from '../lib/store';
 import { syncLabel } from '../lib/sync';
 import type { SyncState } from '../lib/sync';
-import { syncAvailable } from '../lib/supabase';
 import type { Data, Settings as S } from '../lib/types';
 
 interface Props {
   data: Data;
   sync: SyncState;
   onBack: () => void;
-  onSignIn: () => void;
+  onPassword: () => void;
   onSignOut: () => void;
   onExport: () => void;
 }
 
 const MACROS: ['p' | 'f' | 'c', string, string][] = [['p', 'Protein', 'var(--rose-ink)'], ['f', 'Fat', 'var(--peach-ink)'], ['c', 'Carbs', 'var(--accent-ink)']];
 
-export function Settings({ data, sync, onBack, onSignIn, onSignOut, onExport }: Props) {
+export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }: Props) {
   const s = data.settings;
   const t = macroTargets(s);
   const hasGoal = s.goal > 0;
@@ -39,6 +38,8 @@ export function Settings({ data, sync, onBack, onSignIn, onSignOut, onExport }: 
   const user = sync.user;
   const email = user?.email ?? '';
   const initial = (user?.user_metadata?.full_name || email || '?')[0]?.toUpperCase();
+  // accounts created with a password have an "email" identity; Google-only accounts don't
+  const hasPassword = !!user?.identities?.some(i => i.provider === 'email');
   const days = Object.values(data.days).filter(d => d.meals.length).length;
 
   return (
@@ -106,20 +107,25 @@ export function Settings({ data, sync, onBack, onSignIn, onSignOut, onExport }: 
         <div className="card" style={{ marginTop: 12 }}>
           <div className="row">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: user ? 'var(--accent)' : 'var(--disabled)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 15, fontWeight: 700, flex: 'none' }}>
-                {user ? initial : '?'}
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 15, fontWeight: 700, flex: 'none' }}>
+                {initial}
               </div>
               <div style={{ minWidth: 0 }}>
-                <div className="row-name">{user ? email : 'No account'}</div>
-                <div className="row-sub">{user ? syncLabel(sync) : syncAvailable ? 'Data stays on this phone' : 'Sync isn’t set up · data stays on this phone'}</div>
+                <div className="row-name">{email}</div>
+                <div className="row-sub" style={{ color: sync.save === 'offline' || sync.save === 'error' ? 'var(--danger)' : undefined }}>{syncLabel(sync)}</div>
               </div>
             </div>
-            {(user || syncAvailable) && (
-              <button className="pill-btn" style={{ height: 36, padding: '0 14px', flex: 'none' }} onClick={user ? onSignOut : onSignIn}>
-                {user ? 'Sign out' : 'Sign in'}
-              </button>
-            )}
+            <button className="pill-btn" style={{ height: 36, padding: '0 14px', flex: 'none' }} onClick={onSignOut}>
+              Sign out
+            </button>
           </div>
+          <button className="row row-sep" onClick={onPassword}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>{hasPassword ? 'Change password' : 'Set a password'}</div>
+              <div className="row-sub">{hasPassword ? 'For signing in with email' : 'To sign in with email too, not only Google'}</div>
+            </div>
+            <ChevronRight small color="var(--faint)" />
+          </button>
           <button className="row row-sep" onClick={onExport}>
             <div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>Export data</div>
