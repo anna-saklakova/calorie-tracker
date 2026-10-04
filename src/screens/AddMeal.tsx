@@ -24,9 +24,13 @@ export function AddMeal({ draft, today, datePick, toggleDatePick, setDraft, addP
   const cam = useRef<HTMLInputElement>(null);
   const gal = useRef<HTMLInputElement>(null);
   const voice = useVoiceNote(t => setDraft(d => ({ ...d, text: (d.text ? d.text.trim() + ' ' : '') + t })), onError);
-  const cantRecognize = !draft.text.trim() && !draft.photos.length;
+  const busyVoice = voice.recording || voice.transcribing;
+  const cantRecognize = busyVoice || (!draft.text.trim() && !draft.photos.length);
 
-  const recHint = voice.recording ? (voice.interim ? `“${voice.interim}”` : 'Listening… tap to stop') : draft.text ? 'Transcript is editable' : 'Hold a thought? Tap the mic';
+  const clock = `${Math.floor(voice.seconds / 60)}:${String(voice.seconds % 60).padStart(2, '0')}`;
+  const recHint = voice.recording
+    ? `Recording · ${clock} · tap to stop`
+    : voice.transcribing ? 'Turning your voice note into text…' : draft.text ? 'Transcript is editable' : 'Hold a thought? Tap the mic';
 
   return (
     <div className="screen rise">
@@ -85,6 +89,7 @@ export function AddMeal({ draft, today, datePick, toggleDatePick, setDraft, addP
             </span>
             <button
               onClick={voice.toggle}
+              disabled={voice.transcribing}
               aria-label={voice.recording ? 'Stop voice note' : 'Voice note'}
               aria-pressed={voice.recording}
               style={{ flex: 'none', width: 44, height: 44, borderRadius: '50%', border: 'none', background: voice.recording ? '#F4E3DD' : 'var(--bg)', display: 'grid', placeItems: 'center', transition: 'background .2s' }}
@@ -94,12 +99,12 @@ export function AddMeal({ draft, today, datePick, toggleDatePick, setDraft, addP
           </div>
         </div>
 
-        <button className="btn-outline" style={{ marginTop: 18 }} onClick={() => { voice.stop(); onManual(); }}>
+        <button className="btn-outline" style={{ marginTop: 18 }} onClick={() => { voice.cancel(); onManual(); }}>
           Add by hand or from library
         </button>
       </div>
       <div className="footer">
-        <button className="btn-primary" disabled={cantRecognize} onClick={() => { voice.stop(); onRecognize(); }}>
+        <button className="btn-primary" disabled={cantRecognize} onClick={onRecognize}>
           Recognize
         </button>
       </div>

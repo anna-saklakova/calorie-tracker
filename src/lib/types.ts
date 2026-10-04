@@ -1,3 +1,5 @@
+import type { AmountSource, NutritionSource } from './ai/types';
+
 export type MealType = 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack';
 export const MEAL_ORDER: MealType[] = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 
@@ -15,6 +17,10 @@ export interface Item extends Macros {
   amount: number;
   /** set when the item was added in portions from a portion-based product */
   portions?: number;
+  /** where the amount came from, when the item was recognized (kept to measure quality later) */
+  amountSource?: AmountSource;
+  /** where the nutrients came from, when the item was recognized */
+  nutritionSource?: NutritionSource;
 }
 
 export interface Meal {

@@ -46,7 +46,7 @@ export default function App() {
   const [datePick, setDatePick] = useState(false);
   const [draft, setDraft] = useState<Draft>({ date: today, meal: defaultMeal(), text: '', photos: [] });
   const [review, setReview] = useState<ReviewItem[]>([]);
-  const [lowConf, setLowConf] = useState(false);
+  const [reviewNotes, setReviewNotes] = useState<string[]>([]);
   const [failMsg, setFailMsg] = useState('');
   const [man, setMan] = useState<ManualForm>(emptyManual);
   const [picking, setPicking] = useState(false);
@@ -123,7 +123,7 @@ export default function App() {
         go('failed');
       } else {
         setReview(res.items);
-        setLowConf(res.lowConfidence);
+        setReviewNotes(res.notes);
         if (correction) setDraft(d => ({ ...d, text: d.text + '\n' + correction }));
         go('review');
       }
@@ -140,7 +140,7 @@ export default function App() {
 
   const confirmSave = () => {
     if (!review.length) return;
-    const items: Item[] = review.map(it => ({ id: uid(), name: it.name.trim() || 'Item', amount: +it.amount || 0, kcal: +it.kcal || 0, p: +it.p || 0, f: +it.f || 0, c: +it.c || 0 }));
+    const items: Item[] = review.map(it => ({ id: uid(), name: it.name.trim() || 'Item', amount: +it.amount || 0, kcal: +it.kcal || 0, p: +it.p || 0, f: +it.f || 0, c: +it.c || 0, amountSource: it.amountSource, nutritionSource: it.nutritionSource }));
     const toLib = review
       .filter(it => it.save && !library.some(p => p.name.toLowerCase() === it.name.trim().toLowerCase()))
       .map<Product>(it => {
@@ -152,7 +152,7 @@ export default function App() {
     clearPhotos(draft.photos);
     setDraft(d => ({ ...d, text: '', photos: [] }));
     setReview([]);
-    setLowConf(false);
+    setReviewNotes([]);
     setDate(draft.date);
     go('today');
     showToast(`Saved to ${draft.meal}` + (toLib.length ? ` · ${toLib.length} added to library` : ''));
@@ -265,7 +265,7 @@ export default function App() {
         <Review
           subtitle={`${draft.meal} · ${fullDayLabel(draft.date, today)} · ${review.length} ${review.length === 1 ? 'item' : 'items'}`}
           items={review}
-          lowConf={lowConf}
+          notes={reviewNotes}
           onBack={() => go('add')}
           onChange={(id, fn) => setReview(r => r.map(x => (x.id === id ? fn(x) : x)))}
           onAmount={(id, v) => setReview(r => r.map(x => (x.id === id ? { ...scaleItem(x, v), amount: v === '' ? ('' as unknown as number) : +v } : x)))}
