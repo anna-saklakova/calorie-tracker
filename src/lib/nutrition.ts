@@ -1,4 +1,4 @@
-import type { Day, Item, Macros, MealType, Settings } from './types';
+import type { Day, Goals, Item, Macros, MealType, Settings } from './types';
 
 /** Thin-space thousands separator, as in the design ("1 293"). */
 export const fmt = (n: number) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -59,7 +59,7 @@ export interface MacroTargets {
   gramsKcal: number;
 }
 
-export function macroTargets(s: Pick<Settings, 'macroMode' | 'macroGoal' | 'goal'>): MacroTargets {
+export function macroTargets(s: Goals): MacroTargets {
   const mg = { p: +s.macroGoal.p || 0, f: +s.macroGoal.f || 0, c: +s.macroGoal.c || 0 };
   const pctSum = mg.p + mg.f + mg.c;
   const gramsKcal = Math.round(mg.p * 4 + mg.f * 9 + mg.c * 4);
@@ -79,3 +79,30 @@ export function balanceTag(actualPct: number, targetPct: number, anyEaten: boole
   return dev <= 3 ? 'on' : dev <= 8 ? 'ok' : 'off';
 }
 export const TAG_LABEL: Record<BalanceTag, string> = { none: '—', on: 'On track', ok: 'Acceptable', off: 'Off balance' };
+
+// ── Goals by date and day status ────────────────────────────
+
+/** The goals that applied on `date`: the latest snapshot starting on or before it. */
+export function goalsOn(s: Settings, date: string): Goals {
+  if (!s.goalHistory?.length) return s;
+  const h = [...s.goalHistory].sort((a, b) => a.from.localeCompare(b.from));
+  // before the first snapshot (shouldn't happen: the first starts at 0000-01-01), use the oldest goals
+  return h.filter(x => x.from <= date).pop() ?? h[0];
+}
+
+export type KcalStatus = 'none' | 'within' | 'over' | 'way_over';
+/** Within the goal, up to 10 % over, or more than 10 % over. */
+export function kcalStatus(kcal: number, goal: number): KcalStatus {
+  if (goal <= 0 || kcal <= 0) return 'none';
+  if (kcal <= goal) return 'within';
+  return kcal <= goal * 1.1 ? 'over' : 'way_over';
+}
+export const KCAL_COLOR: Record<KcalStatus, string> = { none: '#F3E6DF', within: 'var(--accent)', over: 'var(--est)', way_over: 'var(--danger)' };
+
+export type ProteinStatus = 'none' | 'met' | 'close' | 'short';
+/** Protein reached (≥ 90 % of target), close (≥ 75 %) or short. 'none' without a target or food. */
+export function proteinStatus(protein: number, target: number, anyEaten: boolean): ProteinStatus {
+  if (target <= 0 || !anyEaten) return 'none';
+  const r = protein / target;
+  return r >= 0.9 ? 'met' : r >= 0.75 ? 'close' : 'short';
+}

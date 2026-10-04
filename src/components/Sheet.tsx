@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { MealChips, NumInput, Segmented, Switch } from './ui';
+import { MealChips, NumInput, Segmented } from './ui';
 import { fmt, r1, scaleItem } from '../lib/nutrition';
 import type { Item, MealType, Product } from '../lib/types';
 
@@ -16,10 +16,24 @@ interface Props {
   onSaveProduct: (p: Product) => void;
   onAddProduct: (p: Product, item: Item, meal: MealType) => void;
   onDeleteProduct: (p: Product) => void;
+  /** for a logged item: whether a library product with its name exists, and how to add one */
+  inLibrary: (name: string) => boolean;
+  onAddToLibrary: (item: Item) => void;
 }
 
 type Num = number | '';
 const toNum = (v: string): Num => (v === '' ? '' : +v);
+
+/**
+ * Re-expresses a product's values for the other basis, so the same food keeps the same nutrition:
+ * 50 kcal per 25 g portion ⇄ 200 kcal per 100 g.
+ */
+export function switchBasis(p: Product, basis: Product['basis']): Product {
+  const portion = +p.portion || 100;
+  const k = basis === 'portion' ? portion / 100 : 100 / portion;
+  const conv = (v: number | '', round: (n: number) => number) => ((v as unknown) === '' ? v : round((+v || 0) * k));
+  return { ...p, basis, kcal: conv(p.kcal, Math.round) as number, p: conv(p.p, r1) as number, f: conv(p.f, r1) as number, c: conv(p.c, r1) as number };
+}
 
 /** What `amount` of a product adds up to: grams, kcal and macros. */
 export function productPortion(p: Product, amount: number) {
@@ -36,7 +50,7 @@ export function productPortion(p: Product, amount: number) {
   };
 }
 
-export function Sheet({ sheet, setSheet, onClose, onSaveItem, onDeleteItem, onSaveProduct, onAddProduct, onDeleteProduct }: Props) {
+export function Sheet({ sheet, setSheet, onClose, onSaveItem, onDeleteItem, onSaveProduct, onAddProduct, onDeleteProduct, inLibrary, onAddToLibrary }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -91,7 +105,7 @@ export function Sheet({ sheet, setSheet, onClose, onSaveItem, onDeleteItem, onSa
                   small
                   value={sheet.draft.basis}
                   options={[['100', '100 g'], ['portion', 'Portion']]}
-                  onChange={b => setSheet({ ...sheet, draft: { ...sheet.draft, basis: b }, addAmount: b === '100' ? '100' : '1' })}
+                  onChange={b => b !== sheet.draft.basis && setSheet({ ...sheet, draft: switchBasis(sheet.draft, b), addAmount: b === '100' ? '100' : '1' })}
                 />
               </div>
               {sheet.draft.basis === 'portion' && (
@@ -123,11 +137,6 @@ export function Sheet({ sheet, setSheet, onClose, onSaveItem, onDeleteItem, onSa
               </label>
             ))}
           </div>
-          {sheet.type === 'product' && (
-            <Switch on={sheet.draft.fav} onToggle={() => setDraft({ fav: !sheet.draft.fav })}>
-              Frequent favourite
-            </Switch>
-          )}
         </div>
 
         {sheet.type === 'product' && !sheet.isNew && product && (
@@ -150,6 +159,14 @@ export function Sheet({ sheet, setSheet, onClose, onSaveItem, onDeleteItem, onSa
         <button className="btn-primary" style={{ marginTop: 14 }} onClick={primary} disabled={!d.name.trim()}>
           {isItem ? 'Save changes' : sheet.isNew ? 'Save product' : `Add to ${sheet.addMeal}`}
         </button>
+        {sheet.type === 'item' &&
+          (inLibrary(sheet.draft.name) ? (
+            <div style={{ marginTop: 8, height: 48, display: 'grid', placeItems: 'center', fontSize: 14, color: 'var(--muted)' }}>In your library</div>
+          ) : (
+            <button className="btn-ghost" style={{ marginTop: 8 }} disabled={!d.name.trim() || !(+sheet.draft.amount > 0)} onClick={() => onAddToLibrary(sheet.draft)}>
+              Add to library
+            </button>
+          ))}
         {sheet.type === 'product' && !sheet.isNew && (
           <button
             className="btn-ghost"

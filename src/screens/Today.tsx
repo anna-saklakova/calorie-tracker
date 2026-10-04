@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, SettingsIcon } from '../components/icons';
 import { DateStrip, MacroCards } from '../components/ui';
 import type { MacroCardData } from '../components/ui';
 import { dayLabel, shift } from '../lib/dates';
-import { amountLabel, balanceTag, dayTotals, fmt, MACRO_KEYS, macroPct, macroTargets } from '../lib/nutrition';
+import { amountLabel, balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalStatus, MACRO_KEYS, macroPct, macroTargets } from '../lib/nutrition';
 import type { MacroKey } from '../lib/nutrition';
 import type { Data, Item, Meal } from '../lib/types';
 
@@ -53,7 +53,8 @@ function ItemRow({ item, units, onOpen, onLong }: { item: Item; units: Data['set
 }
 
 export function Today({ data, date, today, datePick, setDate, toggleDatePick, openSettings, openItem, deleteItem }: Props) {
-  const s = data.settings;
+  // the goals that applied on this day (goal changes don't rewrite the past)
+  const s = goalsOn(data.settings, date);
   const day = data.days[date];
   const meals = day?.meals ?? [];
   const tot = dayTotals(day);
@@ -121,7 +122,7 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
               <circle cx="42" cy="42" r="36" fill="none" stroke="var(--rose)" strokeWidth="7" />
               <circle
                 cx="42" cy="42" r="36" fill="none"
-                stroke={tot.kcal > s.goal ? 'var(--est)' : 'var(--accent)'}
+                stroke={KCAL_COLOR[kcalStatus(tot.kcal, s.goal)]}
                 strokeWidth="7"
                 strokeLinecap="round"
                 strokeDasharray={`${(2 * Math.PI * 36 * progress).toFixed(1)} 999`}
@@ -151,7 +152,7 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
             </div>
             <div className="card">
               {m.items.map(it => (
-                <ItemRow key={it.id} item={it} units={s.units} onOpen={() => openItem(m, it)} onLong={() => deleteItem(m, it)} />
+                <ItemRow key={it.id} item={it} units={data.settings.units} onOpen={() => openItem(m, it)} onLong={() => deleteItem(m, it)} />
               ))}
             </div>
           </section>

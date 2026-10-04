@@ -40,7 +40,8 @@ export interface Product extends Macros {
   /** macros are per 100 g, or per portion of `portion` grams */
   basis: '100' | 'portion';
   portion: number;
-  fav: boolean;
+  /** favourites were removed from the app; older saved products may still carry this */
+  fav?: boolean;
   updatedAt: number;
   /** tombstone so a delete survives sync merges */
   deleted?: boolean;
@@ -48,12 +49,26 @@ export interface Product extends Macros {
 
 export type MacroMode = 'pct' | 'g';
 
-export interface Settings {
+/** Calorie and macro goals. */
+export interface Goals {
   /** 0 = no goal */
   goal: number;
   macroMode: MacroMode;
   macroGoal: { p: number | ''; f: number | ''; c: number | '' };
+}
+
+/** The goals in force from `from` (YYYY-MM-DD) until the next snapshot. */
+export interface GoalSnapshot extends Goals {
+  from: string;
+}
+
+export interface Settings extends Goals {
   units: 'g' | 'portion';
+  /**
+   * Goal changes apply from the day they're made; earlier days keep the goals they had.
+   * Empty until the goals are first changed: then the current goals apply to every day.
+   */
+  goalHistory?: GoalSnapshot[];
   updatedAt: number;
 }
 

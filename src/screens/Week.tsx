@@ -2,8 +2,8 @@ import { ChevronLeft, ChevronRight } from '../components/icons';
 import { MacroCards } from '../components/ui';
 import type { MacroCardData } from '../components/ui';
 import { parse, shift, WD, weekLabel } from '../lib/dates';
-import { balanceTag, dayTotals, fmt, MACRO_KEYS, macroPct, macroTargets } from '../lib/nutrition';
-import type { MacroKey } from '../lib/nutrition';
+import { balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalStatus, MACRO_KEYS, macroPct, macroTargets, proteinStatus } from '../lib/nutrition';
+import type { MacroKey, ProteinStatus } from '../lib/nutrition';
 import type { Data } from '../lib/types';
 
 interface Props {
@@ -17,11 +17,22 @@ interface Props {
 
 const H = 120;
 
+const PROTEIN_MARK: Record<Exclude<ProteinStatus, 'none'>, [string, string, string]> = {
+  met: ['✓', 'var(--accent)', 'protein reached'],
+  close: ['~', 'var(--est)', 'protein almost reached'],
+  short: ['✕', 'var(--danger)', 'protein short']
+};
+
 export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, openDay }: Props) {
-  const s = data.settings;
-  const hasGoal = s.goal > 0;
   const days = Array.from({ length: 7 }, (_, i) => shift(weekStart, i));
-  const totals = days.map(d => ({ d, t: dayTotals(data.days[d]) }));
+  // each day is judged against the goals it had; the summary uses the latest day shown
+  const totals = days.map(d => {
+    const goals = goalsOn(data.settings, d);
+    return { d, t: dayTotals(data.days[d]), goals, targets: macroTargets(goals) };
+  });
+  const lastDay = days[6] <= today ? days[6] : today;
+  const s = goalsOn(data.settings, lastDay);
+  const hasGoal = s.goal > 0;
   const logged = totals.filter(x => x.d <= today && x.t.kcal > 0);
   const avg = (k: 'kcal' | 'p' | 'f' | 'c') => (logged.length ? logged.reduce((a, x) => a + x.t[k], 0) / logged.length : 0);
   const avgM = { p: avg('p'), f: avg('f'), c: avg('c') };
@@ -41,6 +52,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
       }
     ])
   ) as Record<MacroKey, MacroCardData>;
+  const showProtein = totals.some(x => x.targets.g.p > 0);
 
   return (
     <div className="screen fade">
@@ -85,8 +97,10 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, alignItems: 'end', height: 160 }}>
             {totals.map(x => {
               const has = x.d <= today && x.t.kcal > 0;
-              const isT = x.d === today;
               const h = has ? Math.max(6, Math.round((H * x.t.kcal) / maxK)) : 3;
+              const status = kcalStatus(x.t.kcal, x.goals.goal);
+              // without a goal, logged days use the neutral bar colour
+              const color = !has ? '#F3E6DF' : status === 'none' ? '#E8D3CA' : KCAL_COLOR[status];
               return (
                 <button
                   key={x.d}
@@ -96,7 +110,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
                   style={{ height: '100%', border: 'none', background: 'transparent', padding: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}
                 >
                   <span className="num" style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>{has ? fmt(x.t.kcal) : ''}</span>
-                  <span style={{ width: '100%', height: h, borderRadius: 8, background: isT ? 'var(--accent)' : has ? '#E8D3CA' : '#F3E6DF', transition: 'height .4s' }} />
+                  <span style={{ width: '100%', height: h, borderRadius: 8, background: color, transition: 'height .4s' }} />
                 </button>
               );
             })}
@@ -108,8 +122,26 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
               </span>
             ))}
           </div>
+          {showProtein && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, marginTop: 10, borderTop: '1px solid var(--line-soft)', paddingTop: 10 }}>
+                {totals.map(x => {
+                  const st = x.d <= today ? proteinStatus(x.t.p, x.targets.g.p, x.t.kcal > 0) : 'none';
+                  const mark = st === 'none' ? null : PROTEIN_MARK[st];
+                  return (
+                    <span key={x.d} aria-label={mark ? `${WD[parse(x.d).getDay()]}: ${mark[2]}, ${Math.round(x.t.p)} of ${x.targets.g.p} g` : undefined} style={{ textAlign: 'center', fontSize: 14, fontWeight: 700, lineHeight: '20px', color: mark ? mark[1] : 'var(--faint)' }}>
+                      {mark ? mark[0] : '·'}
+                    </span>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 6, textAlign: 'center' }}>Protein · ✓ 90 %+ of goal · ~ 75–90 % · ✕ less</div>
+            </>
+          )}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 12, padding: '0 4px' }}>Tap a bar to open that day.</div>
+        <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 12, padding: '0 4px' }}>
+          Tap a bar to open that day.{hasGoal ? ' Green within the goal, yellow up to 10 % over, red more than 10 % over.' : ''}
+        </div>
       </div>
     </div>
   );

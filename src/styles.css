@@ -122,9 +122,11 @@ button.row:active, .row-btn:active { background: var(--bg); }
 /* macro cards */
 .macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .macro { border-radius: 16px; padding: 12px 14px; }
-.macro.p { background: var(--rose); } .macro.p .macro-name { color: var(--rose-ink); }
-.macro.f { background: var(--peach); } .macro.f .macro-name { color: var(--peach-ink); }
-.macro.c { background: var(--sage); } .macro.c .macro-name { color: var(--accent-ink); }
+/* coloured by how close the day is to the goal, not by macro */
+.macro.on { background: var(--sage); } .macro.on .macro-name { color: var(--accent-ink); }
+.macro.ok { background: var(--est-soft); } .macro.ok .macro-name { color: var(--est-ink); }
+.macro.off { background: var(--rose); } .macro.off .macro-name { color: var(--rose-ink); }
+.macro.none { background: var(--surface); } .macro.none .macro-name { color: var(--muted); }
 .macro-name { font-size: 12px; font-weight: 600; }
 .macro-val { font-size: 20px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .macro-val small { font-size: 12px; color: var(--muted); font-weight: 500; }

@@ -30,6 +30,12 @@ export interface Draft {
   photos: Photo[];
 }
 
+/** A logged or recognized item as a library product, per 100 g. */
+const productFromItem = (it: Item): Product => {
+  const a = +it.amount || 100;
+  return { id: uid(), name: it.name.trim(), basis: '100', portion: 100, updatedAt: 0, kcal: Math.round(((+it.kcal || 0) / a) * 100), p: r1((+it.p / a) * 100), f: r1((+it.f / a) * 100), c: r1((+it.c / a) * 100) };
+};
+
 interface Toast {
   msg: string;
   undo?: () => void;
@@ -40,6 +46,7 @@ export default function App() {
   const sync = useSync();
   const today = todayIso();
   const library = store.liveLibrary(data);
+  const inLibrary = (name: string) => library.some(p => p.name.toLowerCase() === name.trim().toLowerCase());
 
   const [screen, setScreen] = useState<Screen>('today');
   const [date, setDate] = useState(today);
@@ -141,12 +148,7 @@ export default function App() {
   const confirmSave = () => {
     if (!review.length) return;
     const items: Item[] = review.map(it => ({ id: uid(), name: it.name.trim() || 'Item', amount: +it.amount || 0, kcal: +it.kcal || 0, p: +it.p || 0, f: +it.f || 0, c: +it.c || 0, amountSource: it.amountSource, nutritionSource: it.nutritionSource }));
-    const toLib = review
-      .filter(it => it.save && !library.some(p => p.name.toLowerCase() === it.name.trim().toLowerCase()))
-      .map<Product>(it => {
-        const a = +it.amount || 100;
-        return { id: uid(), name: it.name.trim(), basis: '100', portion: 100, fav: false, updatedAt: 0, kcal: Math.round(((+it.kcal || 0) / a) * 100), p: r1((+it.p / a) * 100), f: r1((+it.f / a) * 100), c: r1((+it.c / a) * 100) };
-      });
+    const toLib = review.filter(it => it.save && !inLibrary(it.name)).map(productFromItem);
     store.addItems(draft.date, draft.meal, items);
     toLib.forEach(store.upsertProduct);
     clearPhotos(draft.photos);
@@ -304,10 +306,9 @@ export default function App() {
             go('manual');
           }}
           onNew={() =>
-            setSheet({ type: 'product', isNew: true, draft: { id: uid(), name: '', basis: '100', portion: 100, kcal: '' as unknown as number, p: '' as unknown as number, f: '' as unknown as number, c: '' as unknown as number, fav: false, updatedAt: 0 }, addAmount: '100', addMeal: defaultMeal() })
+            setSheet({ type: 'product', isNew: true, draft: { id: uid(), name: '', basis: '100', portion: 100, kcal: '' as unknown as number, p: '' as unknown as number, f: '' as unknown as number, c: '' as unknown as number, updatedAt: 0 }, addAmount: '100', addMeal: defaultMeal() })
           }
           onOpen={p => setSheet({ type: 'product', isNew: false, draft: { ...p }, addAmount: p.basis === '100' ? '100' : '1', addMeal: picking ? draft.meal : defaultMeal() })}
-          onToggleFav={p => store.upsertProduct({ ...p, fav: !p.fav })}
         />
       )}
 
@@ -411,6 +412,11 @@ export default function App() {
             setDate(d);
             go('today');
             showToast(`Added to ${meal}`);
+          }}
+          inLibrary={inLibrary}
+          onAddToLibrary={it => {
+            store.upsertProduct(productFromItem(it));
+            showToast('Added to library');
           }}
           onDeleteProduct={p => {
             store.deleteProduct(p.id);

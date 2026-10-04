@@ -98,7 +98,7 @@ describe('schema and mapping', () => {
   });
 
   it('converts portion-based library products to per 100 g', () => {
-    const [e] = libraryEntries([{ id: 'b', name: 'Bar', basis: 'portion', portion: 40, kcal: 180, p: 8, f: 6, c: 20, fav: false, updatedAt: 0 }]);
+    const [e] = libraryEntries([{ id: 'b', name: 'Bar', basis: 'portion', portion: 40, kcal: 180, p: 8, f: 6, c: 20, updatedAt: 0 }]);
     expect(e.per100).toMatchObject({ kcal: 450, protein_g: 20, fat_g: 15, carbs_g: 50 });
   });
 

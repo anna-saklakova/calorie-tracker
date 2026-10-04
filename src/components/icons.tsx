@@ -62,12 +62,6 @@ export const SearchIcon = () => (
   </svg>
 );
 
-export const Star = ({ on }: { on: boolean }) => (
-  <svg width="18" height="18" viewBox="0 0 18 18" fill={on ? 'var(--accent)' : 'none'} stroke={on ? 'var(--accent)' : '#C9C3B8'} strokeWidth="1.5" strokeLinejoin="round" aria-hidden>
-    <path d="m9 1.8 2.2 4.6 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5L1.8 7.1l5-.7z" />
-  </svg>
-);
-
 export const Exclaim = () => (
   <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke={muted} strokeWidth="1.8" strokeLinecap="round" aria-hidden>
     <path d="M13 7v8M13 19.5v.5" />

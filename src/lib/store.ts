@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { emptyData, MEAL_ORDER, uid } from './types';
-import type { Data, Day, Item, MealType, Product, Settings } from './types';
+import { todayIso } from './dates';
+import type { Data, Day, Goals, Item, MealType, Product, Settings } from './types';
 
 // Nothing is kept on the device: the data lives in Supabase (see sync.ts) and only in memory here.
 let data: Data = emptyData();
@@ -105,8 +106,22 @@ export function deleteProduct(id: string) {
   update(d => ({ ...d, library: d.library.map(x => (x.id === id ? { ...x, deleted: true, updatedAt: Date.now() } : x)) }));
 }
 
-export function updateSettings(patch: Partial<Settings>) {
-  update(d => ({ ...d, settings: { ...d.settings, ...patch, updatedAt: Date.now() } }));
+const pickGoals = (s: Goals): Goals => ({ goal: s.goal, macroMode: s.macroMode, macroGoal: { ...s.macroGoal } });
+
+/**
+ * Applies a settings change. A change to the goals is recorded as starting today,
+ * so past days keep being judged against the goals they had.
+ */
+export function updateSettings(patch: Partial<Settings>, today = todayIso()) {
+  update(d => {
+    const next: Settings = { ...d.settings, ...patch, updatedAt: Date.now() };
+    if ('goal' in patch || 'macroMode' in patch || 'macroGoal' in patch) {
+      // first change ever: the goals so far covered every earlier day
+      const history = d.settings.goalHistory?.length ? d.settings.goalHistory : [{ from: '0000-01-01', ...pickGoals(d.settings) }];
+      next.goalHistory = [...history.filter(h => h.from < today), { from: today, ...pickGoals(next) }];
+    }
+    return { ...d, settings: next };
+  });
 }
 
 export const liveLibrary = (d: Data) => d.library.filter(p => !p.deleted);
