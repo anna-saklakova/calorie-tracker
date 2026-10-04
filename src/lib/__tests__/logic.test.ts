@@ -3,6 +3,7 @@ import { balanceTag, macroPct, macroTargets, scaleItem, fmt, sumMacros } from '.
 import { dayLabel, shift, weekStartOf, weekLabel } from '../dates';
 import { mergeData } from '../merge';
 import { applyCorrection, sampleItems } from '../recognize';
+import { authErrorText } from '../supabase';
 import { productPortion } from '../../components/Sheet';
 import { defaultSettings } from '../types';
 import type { Data, Product } from '../types';
@@ -93,5 +94,15 @@ describe('mock recognizer', () => {
     expect(beef).toMatchObject({ amount: 200, src: 'note', hint: 'from your note', low: false });
     expect(beef.kcal).toBe(Math.round((248 / 110) * 200));
     expect(applyCorrection(items, 'broccoli was 150')[3].amount).toBe(150);
+  });
+});
+
+describe('auth errors', () => {
+  it('explains common sign-in problems', () => {
+    expect(authErrorText({ code: 'invalid_credentials', message: 'Invalid login credentials' })).toBe('Wrong email or password');
+    expect(authErrorText({ code: 'email_not_confirmed' })).toMatch(/Confirm your email/);
+    expect(authErrorText({ code: 'weak_password' })).toMatch(/at least 8/);
+    expect(authErrorText({ code: 'over_email_send_rate_limit' })).toMatch(/Too many tries/);
+    expect(authErrorText(new Error('Failed to fetch'))).toMatch(/connection/);
   });
 });
