@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { balanceTag, macroPct, macroTargets, scaleItem, fmt, sumMacros } from '../nutrition';
 import { dayLabel, shift, weekStartOf, weekLabel } from '../dates';
 import { mergeData } from '../merge';
-import { applyCorrection, sampleItems } from '../recognize';
 import { authErrorText } from '../supabase';
 import { productPortion } from '../../components/Sheet';
 import { defaultSettings } from '../types';
@@ -74,26 +73,6 @@ describe('sync merge', () => {
     expect(m.days['2026-10-01'].meals).toHaveLength(1);
     expect(m.library.map(x => [x.id, !!x.deleted])).toEqual([['a', true], ['b', false], ['c', false]]);
     expect(m.settings.updatedAt).toBe(3);
-  });
-});
-
-describe('mock recognizer', () => {
-  it('marks sources based on photos and library', () => {
-    const lib = [p('Barilla spaghetti, dry')];
-    function p(name: string): Product { return { id: name, name, basis: '100', portion: 100, kcal: 359, p: 13, f: 1.5, c: 72, fav: false, updatedAt: 0 }; }
-    const items = sampleItems({ photos: [{ kind: 'label', file: null as unknown as File }], library: lib }, true);
-    expect(items.map(i => i.src)).toEqual(['library', 'label', 'estimated', 'estimated']);
-    expect(items[2].low).toBe(true);
-    expect(sampleItems({ photos: [], library: [] }, false).every(i => i.src === 'estimated')).toBe(true);
-  });
-
-  it('applies a correction to the named item', () => {
-    const items = sampleItems({ photos: [], library: [] }, true);
-    const out = applyCorrection(items, 'the meat was 200 g, not 110');
-    const beef = out.find(i => i.name.includes('beef'))!;
-    expect(beef).toMatchObject({ amount: 200, src: 'note', hint: 'from your note', low: false });
-    expect(beef.kcal).toBe(Math.round((248 / 110) * 200));
-    expect(applyCorrection(items, 'broccoli was 150')[3].amount).toBe(150);
   });
 });
 

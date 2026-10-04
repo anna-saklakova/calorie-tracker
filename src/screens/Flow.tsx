@@ -59,7 +59,7 @@ const HINT_STYLE: Record<ReviewItem['src'], [string, string]> = {
 interface ReviewProps {
   subtitle: string;
   items: ReviewItem[];
-  lowConf: boolean;
+  notes: string[];
   onBack: () => void;
   onChange: (id: string, patch: (it: ReviewItem) => ReviewItem) => void;
   onAmount: (id: string, v: string) => void;
@@ -68,7 +68,7 @@ interface ReviewProps {
   onReRun: (note: string) => void;
 }
 
-export function Review({ subtitle, items, lowConf, onBack, onChange, onAmount, onRemove, onConfirm, onReRun }: ReviewProps) {
+export function Review({ subtitle, items, notes, onBack, onChange, onAmount, onRemove, onConfirm, onReRun }: ReviewProps) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState('');
   const tot = sumMacros(items);
@@ -80,15 +80,15 @@ export function Review({ subtitle, items, lowConf, onBack, onChange, onAmount, o
       <SubHeader title="Review" onBack={onBack} />
       <div className="scroll pad-sub">
         <div className="secondary" style={{ padding: '0 4px' }}>{subtitle}</div>
-        {lowConf && (
-          <div style={{ marginTop: 14, background: 'var(--est-soft)', borderRadius: 16, padding: '12px 14px', fontSize: 14, color: 'var(--est-text)', textWrap: 'pretty' }}>
-            One portion was hard to judge from the photo. Check the amount marked with ~ before saving.
+        {notes.length > 0 && (
+          <div style={{ marginTop: 14, background: 'var(--est-soft)', borderRadius: 16, padding: '12px 14px', fontSize: 14, color: 'var(--est-text)', textWrap: 'pretty', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {notes.map(n => <div key={n}>{n}</div>)}
           </div>
         )}
         {!items.length && <div className="secondary" style={{ textAlign: 'center', padding: '40px 24px' }}>All items removed. Go back to add a photo or a note.</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
           {items.map(it => {
-            const est = it.src === 'estimated';
+            const est = it.amountSource ? it.amountSource === 'visual_estimate' : it.src === 'estimated';
             const [hintBg, hintInk] = HINT_STYLE[it.src];
             const amtInk = it.low ? 'var(--est)' : 'var(--ink)';
             return (
@@ -105,7 +105,7 @@ export function Review({ subtitle, items, lowConf, onBack, onChange, onAmount, o
                     ×
                   </button>
                 </div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', marginTop: 6, height: 22, padding: '0 9px', borderRadius: 999, background: hintBg, color: hintInk, fontSize: 12, fontWeight: 600 }}>{it.hint}</div>
+                <div style={{ display: 'inline-block', maxWidth: '100%', marginTop: 6, height: 22, lineHeight: '22px', padding: '0 9px', borderRadius: 999, background: hintBg, color: hintInk, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.hint}</div>
                 {it.low && <div style={{ fontSize: 12, color: 'var(--est)', marginTop: 6 }}>{it.lowNote}</div>}
                 <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr 1fr 1fr 1fr', gap: 4, marginTop: 12 }}>
                   <label className="field" style={{ gap: 3 }}>

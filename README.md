@@ -9,7 +9,7 @@ Stack: Vite, React 19, TypeScript, Supabase (auth and storage), vite-plugin-pwa.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # unit tests for nutrition, dates, sync merge, recognizer, auth errors
+npm test           # unit tests for nutrition, dates, sync merge, auth errors, the recognition pipeline
 npm run build      # typecheck + production build to dist/
 ```
 
@@ -22,13 +22,15 @@ To try it on the phone, run `npm run dev -- --host` and open the LAN address in 
 | Account | Required. Nothing opens until you sign in or create an account: email + password (confirmed by email, with password reset) or Google. One email is one account, whichever way you sign in |
 | Today, Week, Library, Settings, Add by hand, item and product sheets | Real. Data is saved to your account in Supabase, nothing is kept on the device |
 | Photos | Real camera (`capture`) and gallery pickers. Each photo is tagged plate or label; tap the tag to switch |
-| Voice note | Real, via the Web Speech API (Chrome on Android). The transcript goes into the note, where you can edit it |
-| **Recognize** | **Mocked.** Returns the demo pasta dish after about 3 s. The outcome is random: clean, low-confidence or failed. Sources depend on your input: "from label photo" only when a label photo is attached, "from your library" only when a pasta product is in your library |
+| Voice note | Real. Recorded in the browser, transcribed by `gpt-transcribe` on the server. The text goes into the note, where you can edit it |
+| Recognize | Real. Photos + note → foods, grams and nutrients with their sources, see below |
 | Export | Real. Settings → Export data downloads your data from the cloud as a JSON file |
 
-### Plugging in real recognition
+### How recognition works
 
-`src/lib/recognize.ts` defines the `Recognizer` type: it takes the photos, note, library and an optional correction, and returns either items or a failure. Replace `export const recognize = mockRecognizer` with a call to your own server route (for example one that sends the images to a vision model). Keep the API key on the server, never in this bundle. The UI doesn't need any change.
+Follows the AI module spec: `api/recognize.ts` (a Vercel function) sends all photos, the note and the user's library to `gpt-5.4-mini` (Responses API, strict JSON Schema). The model only reads the meal: which foods, how many grams and where that number came from (`user_exact`, `user_estimate`, `visual_estimate`), which label belongs to which food, and which library product or generic food it matches (it can only pick ids that exist). `src/lib/ai/meal.ts` then picks the nutrient source per food in a fixed order (label → your library → generic DB → model estimate) and does the arithmetic in code. The generic DB (`src/lib/ai/genericFoods.ts`) holds 175 common foods per 100 g, rounded from USDA FoodData Central. Voice notes are recorded in the browser and transcribed by `gpt-transcribe` via `api/transcribe.ts`.
+
+The OpenAI key lives only in the Vercel environment (`OPENAI_API_KEY`, Sensitive). Both functions require a signed-in Supabase session and a daily quota (`consume_ai_quota`, 30 recognitions / 60 voice notes per user). Setup: [docs/openai-setup.md](docs/openai-setup.md).
 
 ## Supabase setup
 
@@ -51,6 +53,7 @@ To try it on the phone, run `npm run dev -- --host` and open the LAN address in 
 ## Where things are
 
 ```
+api/                   Vercel functions: recognize.ts, transcribe.ts (hold the OpenAI key)
 src/
   App.tsx              screen state, navigation, Android back button, toasts
   styles.css           design tokens (colours, radii, type) and components
@@ -61,8 +64,9 @@ src/
     sync.ts, merge.ts  loading and saving to Supabase
     supabase.ts        client and auth (password, Google, reset)
     nutrition.ts       totals, macro % of calories, goal tags (On track ≤3 pts, Acceptable ≤8, else Off balance)
-    recognize.ts       recognizer interface + mock
-    voice.ts           Web Speech API hook
+    recognize.ts       calls /api/recognize, maps the result to Review rows
+    ai/                shared with the server: schema, prompt, generic food DB, nutrient maths
+    voice.ts           voice note recording → /api/transcribe
 ```
 
 ## Changes from the prototype
