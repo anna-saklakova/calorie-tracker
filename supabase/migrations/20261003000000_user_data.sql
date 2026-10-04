@@ -21,3 +21,7 @@ create policy "Users update their own data" on public.user_data
 drop policy if exists "Users delete their own data" on public.user_data;
 create policy "Users delete their own data" on public.user_data
   for delete using (auth.uid() = user_id);
+
+-- Table privileges for the Data API (see 20261004000000_user_data_grants.sql).
+grant select, insert, update, delete on table public.user_data to authenticated;
+revoke all on table public.user_data from anon;

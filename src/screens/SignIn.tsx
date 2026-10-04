@@ -244,15 +244,22 @@ function Note({ children, tone }: { children: ReactNode; tone?: 'error' | 'ok' }
 }
 
 /** Full-screen state while the session or the data loads, or when loading failed. */
-export function AuthState({ title, body, action }: { title: string; body?: string; action?: { label: string; onClick: () => void } }) {
+type StateAction = { label: string; onClick: () => void };
+
+export function AuthState({ title, body, action, secondary }: { title: string; body?: string; action?: StateAction; secondary?: StateAction }) {
   return (
     <div className="center-state">
       <Logo />
       <div className="state-title" style={{ marginTop: 24 }}>{title}</div>
-      {body && <div className="state-body">{body}</div>}
+      {body && <div className="state-body" style={{ whiteSpace: 'pre-line', wordBreak: 'break-word' }}>{body}</div>}
       {action && (
         <button className="btn-small-dark" style={{ marginTop: 20 }} onClick={action.onClick}>
           {action.label}
+        </button>
+      )}
+      {secondary && (
+        <button className="btn-ghost" style={{ width: 'auto', marginTop: 4, color: 'var(--muted)' }} onClick={secondary.onClick}>
+          {secondary.label}
         </button>
       )}
     </div>

@@ -4,6 +4,10 @@
 
 Прод: https://calorie-tracker-cyan-six.vercel.app
 
+## 0. Таблица и права
+
+**SQL Editor**: запусти `supabase/migrations/20261003000000_user_data.sql` (таблица + RLS + права). Если таблица уже есть, достаточно `20261004000000_user_data_grants.sql`. Без прав приложение пишет «Couldn’t load your data · permission denied for table user_data».
+
 ---
 
 ## 1. Вход по email и паролю
