@@ -35,8 +35,8 @@ export async function POST(req: Request): Promise<Response> {
   const content: unknown[] = [{ type: 'input_text', text: userContent(text, voice, library, images) }];
   for (const img of images) {
     content.push({ type: 'input_text', text: `Image ${img.id}:` });
-    // labels need the small print, plates are fine at auto (spec §2.1)
-    content.push({ type: 'input_image', image_url: img.dataUrl, detail: img.kind === 'label' ? 'high' : 'auto' });
+    // always high: people rarely tag label photos, and the small print on packaging needs it
+    content.push({ type: 'input_image', image_url: img.dataUrl, detail: 'high' });
   }
 
   let out: { status?: string; output?: { type: string; content?: { type: string; text?: string; refusal?: string }[] }[] };
@@ -46,7 +46,7 @@ export async function POST(req: Request): Promise<Response> {
         model: config.model(),
         instructions: SYSTEM_PROMPT,
         input: [{ role: 'user', content }],
-        reasoning: { effort: 'low' },
+        reasoning: { effort: 'medium' },
         text: { format: { type: 'json_schema', name: 'meal', strict: true, schema: mealSchema(library.map(p => p.id), images.map(i => i.id)) } },
         store: false
       },

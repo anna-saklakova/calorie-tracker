@@ -106,6 +106,7 @@ export function Review({ subtitle, items, notes, onBack, onChange, onAmount, onR
                   </button>
                 </div>
                 <div style={{ display: 'inline-block', maxWidth: '100%', marginTop: 6, height: 22, lineHeight: '22px', padding: '0 9px', borderRadius: 999, background: hintBg, color: hintInk, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.hint}</div>
+                {it.amountNote && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>Amount: {it.amountNote}</div>}
                 {it.low && <div style={{ fontSize: 12, color: 'var(--est)', marginTop: 6 }}>{it.lowNote}</div>}
                 <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr 1fr 1fr 1fr', gap: 4, marginTop: 12 }}>
                   <label className="field" style={{ gap: 3 }}>

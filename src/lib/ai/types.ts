@@ -62,6 +62,8 @@ export interface IntermediateFood {
   product_name: string | null;
   amount_g: number;
   amount_source: AmountSource;
+  /** how the grams were obtained, e.g. "2 scoops × 15 g (package)" */
+  amount_basis: string | null;
   package_data: PackageData | null;
   library_product_id: string | null;
   generic_food_id: string | null;
@@ -85,11 +87,14 @@ export interface FinalFood {
   product_name: string | null;
   amount_g: number;
   amount_source: AmountSource;
+  amount_basis: string | null;
   nutrition: Nutrients;
   nutrition_source: NutritionSource;
   per100: Per100;
   /** library product or generic food the nutrients came from */
   matched_name: string | null;
+  /** set when the label's energy value didn't match its macros: 'kj' = it was kJ and got converted, 'macros' = replaced by the energy the macros imply */
+  energy_fix: 'kj' | 'macros' | null;
 }
 
 export interface FinalMeal {
