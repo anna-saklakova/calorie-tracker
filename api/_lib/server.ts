@@ -51,7 +51,12 @@ export async function authorize(req: Request, kind: QuotaKind): Promise<Response
     console.error('quota check failed', res.status);
     return fail(502, 'Couldn’t check your account. Try again');
   }
+  // left today for this email; -1 = this email's daily limit, -2 = the app-wide daily limit
   const left = Number(await res.json());
+  if (left === -2) {
+    console.error(`app-wide daily ${kind} limit reached`);
+    return fail(429, kind === 'recognize' ? 'Recognition is paused for today. Add by hand, or try again tomorrow' : 'Voice notes are paused for today. Type the note instead');
+  }
   if (!(left >= 0)) {
     return fail(429, kind === 'recognize' ? 'You’ve reached today’s limit for recognition. Add by hand, or try again tomorrow' : 'You’ve reached today’s limit for voice notes. Type the note instead');
   }

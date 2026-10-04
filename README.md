@@ -30,7 +30,7 @@ To try it on the phone, run `npm run dev -- --host` and open the LAN address in 
 
 Follows the AI module spec: `api/recognize.ts` (a Vercel function) sends all photos, the note and the user's library to `gpt-5.4-mini` (Responses API, strict JSON Schema). The model only reads the meal: which foods, how many grams and where that number came from (`user_exact`, `user_estimate`, `visual_estimate`), which label belongs to which food, and which library product or generic food it matches (it can only pick ids that exist). `src/lib/ai/meal.ts` then picks the nutrient source per food in a fixed order (label → your library → generic DB → model estimate) and does the arithmetic in code. The generic DB (`src/lib/ai/genericFoods.ts`) holds 175 common foods per 100 g, rounded from USDA FoodData Central. Voice notes are recorded in the browser and transcribed by `gpt-transcribe` via `api/transcribe.ts`.
 
-The OpenAI key lives only in the Vercel environment (`OPENAI_API_KEY`, Sensitive). Both functions require a signed-in Supabase session and a daily quota (`consume_ai_quota`, 30 recognitions / 60 voice notes per user). Setup: [docs/openai-setup.md](docs/openai-setup.md).
+The OpenAI key lives only in the Vercel environment (`OPENAI_API_KEY`, Sensitive). Both functions require a signed-in Supabase session and a daily quota (`consume_ai_quota`: 50 recognitions / 100 voice notes per email, 500 / 1000 app-wide; counted per email so deleting and re-creating an account doesn't reset it). Setup: [docs/openai-setup.md](docs/openai-setup.md).
 
 ## Supabase setup
 
