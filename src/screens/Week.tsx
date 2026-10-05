@@ -47,7 +47,9 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
       k,
       {
         pct: actual[k],
-        sub: `${Math.round(avgM[k])} g` + (targets.has ? ` · goal ${targets.pct[k]}%` + (targets.g[k] ? ` · ${targets.g[k]} g` : '') : ''),
+        // actual average under the big %, the goal apart below it
+        sub: `${Math.round(avgM[k])} g`,
+        goal: targets.has ? `${targets.pct[k]}%` + (targets.g[k] ? ` · ${targets.g[k]} g` : '') : undefined,
         tag: balanceTag(k, actual[k], targets.pct[k], actual.kcal > 0)
       }
     ])
@@ -135,7 +137,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
                   );
                 })}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 6, textAlign: 'center' }}>Protein · ✓ 90 %+ of goal · ~ 75–90 % · ✕ less</div>
+              <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 6, textAlign: 'center' }}>Protein · ✓ reached · ~ almost · ✕ short</div>
             </>
           )}
         </div>

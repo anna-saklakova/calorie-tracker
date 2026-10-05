@@ -75,6 +75,8 @@ const MACRO_NAME: Record<MacroKey, string> = { p: 'Protein', f: 'Fat', c: 'Carbs
 export interface MacroCardData {
   pct: number;
   sub: string;
+  /** the goal on its own lines, under the actual values (Week) */
+  goal?: string;
   tag: BalanceTag;
 }
 
@@ -89,6 +91,12 @@ export function MacroCards({ data, showTags }: { data: Record<MacroKey, MacroCar
             <small>%</small>
           </div>
           <div className="macro-sub">{data[k].sub}</div>
+          {data[k].goal && (
+            <div className="macro-goal">
+              <span>Goal</span>
+              {data[k].goal}
+            </div>
+          )}
           {showTags && <div className={`tag ${data[k].tag}`}>{TAG_LABEL[data[k].tag]}</div>}
         </div>
       ))}
