@@ -4,11 +4,13 @@ import { Sheet } from './components/Sheet';
 import type { SheetState } from './components/Sheet';
 import { fullDayLabel, todayIso, weekStartOf } from './lib/dates';
 import { defaultMeal, r1, scaleItem } from './lib/nutrition';
+import { loadPhoto } from './lib/images';
 import { recognize } from './lib/recognize';
 import * as store from './lib/store';
 import { useData } from './lib/store';
 import { authAvailable, signOut, urlAuthError } from './lib/supabase';
 import { endRecovery, fetchLatest, flush, reload, useSync } from './lib/sync';
+import { useVoiceNote } from './lib/voice';
 import { uid } from './lib/types';
 import type { Item, Meal, MealType, Photo, PhotoKind, Product, ReviewItem } from './lib/types';
 import { AddMeal } from './screens/AddMeal';
@@ -51,7 +53,17 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('today');
   const [date, setDate] = useState(today);
   const [datePick, setDatePick] = useState(false);
-  const [draft, setDraft] = useState<Draft>({ date: today, meal: defaultMeal(), text: '', photos: [] });
+  const [draft, setDraftState] = useState<Draft>({ date: today, meal: defaultMeal(), text: '', photos: [] });
+  // the latest draft, so Recognize can read what a voice note or a photo still loading adds after it was pressed
+  const draftRef = useRef(draft);
+  const setDraft = useCallback((fn: (d: Draft) => Draft) => {
+    draftRef.current = fn(draftRef.current);
+    setDraftState(draftRef.current);
+  }, []);
+  // photos are taken in one at a time; this settles when all picked so far are in (or failed)
+  const photoQueue = useRef<Promise<void>>(Promise.resolve());
+  const [photosLoading, setPhotosLoading] = useState(0);
+  const [preparing, setPreparing] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewItem[]>([]);
   const [reviewNotes, setReviewNotes] = useState<string[]>([]);
   const [failMsg, setFailMsg] = useState('');
@@ -73,6 +85,8 @@ export default function App() {
     setToast({ msg, undo });
     toastTimer.current = setTimeout(() => setToast(null), undo ? 4000 : 2400);
   }, []);
+  // lives here, not on the Add screen, so a voice note pressed into Recognize keeps transcribing
+  const voice = useVoiceNote(t => setDraft(d => ({ ...d, text: (d.text ? d.text.trim() + ' ' : '') + t })), showToast);
 
   // A new account starts on Today, with nothing left over from the previous one.
   useEffect(() => {
@@ -81,6 +95,7 @@ export default function App() {
     setSheet(null);
     setPicking(false);
     setReview([]);
+    voice.cancel();
     setDraft(d => (clearPhotos(d.photos), { date: todayIso(), meal: defaultMeal(), text: '', photos: [] }));
   }, [sync.user?.id]);
 
@@ -93,6 +108,7 @@ export default function App() {
     if (screen === 'password') return go('settings'), true;
     if (screen === 'add' || screen === 'settings' || screen === 'week' || screen === 'library') {
       if (picking) return setPicking(false), go('manual'), true;
+      if (screen === 'add') voice.cancel();
       return go('today'), true;
     }
     return false;
@@ -114,14 +130,39 @@ export default function App() {
     go('add');
   };
 
+  /** Copies picked photos in one by one; a photo that can't be read or opened is reported right away. */
+  const addPhotos = (files: File[], kind: PhotoKind) => {
+    setPhotosLoading(n => n + files.length);
+    for (const file of files) {
+      photoQueue.current = photoQueue.current
+        .then(() => loadPhoto(file))
+        .then(
+          f => setDraft(d => ({ ...d, photos: [...d.photos, { id: uid(), kind, file: f, url: URL.createObjectURL(f) }] })),
+          e => showToast((e as Error).message || 'Couldn’t open this photo. Try a JPEG or PNG')
+        )
+        .finally(() => setPhotosLoading(n => n - 1));
+    }
+  };
+
   const runRecognize = async (correction?: string) => {
     abort.current?.abort();
     const ac = new AbortController();
     abort.current = ac;
     go('analyzing');
     try {
+      if (correction === undefined) {
+        // Recognize can be pressed before a voice note is transcribed or a photo is in: finish those first
+        setPreparing(voice.recording || voice.transcribing ? 'Turning your voice note into text…' : photosLoading ? 'Adding your photos…' : null);
+        await Promise.all([voice.finish(), photoQueue.current]);
+        if (ac.signal.aborted) return;
+        setPreparing(null);
+        const d = draftRef.current;
+        // nothing came of them (the error is already in a toast): back to the Add screen
+        if (!d.text.trim() && !d.photos.length) return go('add');
+      }
+      const d = draftRef.current;
       const res = await recognize(
-        { photos: draft.photos, text: draft.text + (correction ? '\n' + correction : ''), library, correction, previous: correction !== undefined ? review : undefined },
+        { photos: d.photos, text: d.text + (correction ? '\n' + correction : ''), library, correction, previous: correction !== undefined ? review : undefined },
         ac.signal
       );
       if (ac.signal.aborted) return;
@@ -245,23 +286,27 @@ export default function App() {
           today={today}
           datePick={datePick}
           toggleDatePick={() => setDatePick(p => !p)}
-          setDraft={fn => setDraft(fn)}
-          addPhotos={(files: File[], kind: PhotoKind) => {
-            const added = files.map(file => ({ id: uid(), kind, file, url: URL.createObjectURL(file) }));
-            setDraft(d => ({ ...d, photos: [...d.photos, ...added] }));
-          }}
+          setDraft={setDraft}
+          voice={voice}
+          photosLoading={photosLoading}
+          addPhotos={addPhotos}
           removePhoto={id => {
             draft.photos.filter(p => p.id === id).forEach(p => URL.revokeObjectURL(p.url));
             setDraft(d => ({ ...d, photos: d.photos.filter(p => p.id !== id) }));
           }}
-          onBack={() => go('today')}
-          onManual={() => go('manual')}
+          onBack={() => {
+            voice.cancel();
+            go('today');
+          }}
+          onManual={() => {
+            voice.cancel();
+            go('manual');
+          }}
           onRecognize={() => runRecognize()}
-          onError={showToast}
         />
       )}
 
-      {screen === 'analyzing' && <Analyzing onCancel={cancelAnalyze} />}
+      {screen === 'analyzing' && <Analyzing preparing={preparing} onCancel={cancelAnalyze} />}
 
       {screen === 'review' && (
         <Review

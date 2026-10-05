@@ -7,7 +7,8 @@ import type { MealType, ReviewItem } from '../lib/types';
 
 // ── Recognizing ─────────────────────────────────────────────
 
-export function Analyzing({ onCancel }: { onCancel: () => void }) {
+/** `preparing` replaces the steps while a voice note or photo is still being finished before recognition. */
+export function Analyzing({ preparing, onCancel }: { preparing?: string | null; onCancel: () => void }) {
   const [step, setStep] = useState(0);
   useEffect(() => {
     const iv = setInterval(() => setStep(s => (s + 1) % ANALYZE_STEPS.length), 900);
@@ -20,7 +21,7 @@ export function Analyzing({ onCancel }: { onCancel: () => void }) {
         <div style={{ position: 'absolute', inset: 14, borderRadius: '50%', border: '3px solid transparent', borderTopColor: 'var(--accent)', animation: 'ctSpin 1.1s linear infinite' }} />
       </div>
       <div className="state-title" style={{ marginTop: 32 }}>Looking at your meal</div>
-      <div className="state-body" style={{ minHeight: 44 }}>{ANALYZE_STEPS[step]}</div>
+      <div className="state-body" style={{ minHeight: 44 }}>{preparing || ANALYZE_STEPS[step]}</div>
       <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 28, textWrap: 'pretty' }}>{ANALYZE_CONTEXT}</div>
       <button onClick={onCancel} style={{ marginTop: 40, height: 44, padding: '0 20px', borderRadius: 999, border: 'none', background: 'transparent', fontSize: 15, color: 'var(--muted)' }}>
         Cancel
