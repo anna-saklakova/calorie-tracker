@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { switchBasis } from '../../components/Sheet';
-import { goalsOn, kcalStatus, proteinStatus } from '../nutrition';
+import { goalsOn, KCAL_COLOR, kcalParts, kcalStatus, proteinStatus } from '../nutrition';
 import { getData, setData, updateSettings } from '../store';
 import { emptyData } from '../types';
 import type { Product } from '../types';
@@ -66,5 +66,12 @@ describe('library basis switch', () => {
 
   it('leaves empty fields empty', () => {
     expect(switchBasis({ ...p, kcal: '' as unknown as number }, '100').kcal).toBe('');
+  });
+
+  it('colours only the calories over the goal', () => {
+    expect(kcalParts(1800, 2000)).toEqual({ within: 1800, over: 0, overColor: KCAL_COLOR.within });
+    expect(kcalParts(2100, 2000)).toEqual({ within: 2000, over: 100, overColor: KCAL_COLOR.over });
+    expect(kcalParts(2500, 2000)).toEqual({ within: 2000, over: 500, overColor: KCAL_COLOR.way_over });
+    expect(kcalParts(1500, 0)).toEqual({ within: 1500, over: 0, overColor: KCAL_COLOR.within });
   });
 });

@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from '../components/icons';
 import { MacroCards } from '../components/ui';
 import type { MacroCardData } from '../components/ui';
 import { parse, shift, WD, weekLabel } from '../lib/dates';
-import { balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalStatus, MACRO_KEYS, macroPct, macroTargets, proteinStatus } from '../lib/nutrition';
+import { balanceTag, dayTotals, fmt, goalsOn, kcalParts, MACRO_KEYS, macroPct, macroTargets, proteinStatus } from '../lib/nutrition';
 import type { MacroKey, ProteinStatus } from '../lib/nutrition';
 import type { Data } from '../lib/types';
 
@@ -100,9 +100,10 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
             {totals.map(x => {
               const has = x.d <= today && x.t.kcal > 0;
               const h = has ? Math.max(6, Math.round((H * x.t.kcal) / maxK)) : 3;
-              const status = kcalStatus(x.t.kcal, x.goals.goal);
-              // without a goal, logged days use the neutral bar colour
-              const color = !has ? '#F3E6DF' : status === 'none' ? '#E8D3CA' : KCAL_COLOR[status];
+              // green up to the day's goal, only the part over it in yellow or red; without a goal, the neutral colour
+              const parts = kcalParts(x.t.kcal, x.goals.goal);
+              const color = !has ? '#F3E6DF' : x.goals.goal > 0 ? 'var(--accent)' : '#E8D3CA';
+              const overH = has && parts.over ? Math.max(3, Math.round((h * parts.over) / x.t.kcal)) : 0;
               return (
                 <button
                   key={x.d}
@@ -112,7 +113,9 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
                   style={{ height: '100%', border: 'none', background: 'transparent', padding: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}
                 >
                   <span className="num" style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>{has ? fmt(x.t.kcal) : ''}</span>
-                  <span style={{ width: '100%', height: h, borderRadius: 8, background: color, transition: 'height .4s' }} />
+                  <span style={{ width: '100%', height: h, borderRadius: 8, background: color, transition: 'height .4s', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    {overH > 0 && <span style={{ height: overH, flex: 'none', background: parts.overColor }} />}
+                  </span>
                 </button>
               );
             })}
@@ -142,7 +145,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
           )}
         </div>
         <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 12, padding: '0 4px' }}>
-          Tap a bar to open that day.{hasGoal ? ' Green within the goal, yellow up to 10 % over, red more than 10 % over.' : ''}
+          Tap a bar to open that day.{hasGoal ? ' Green up to the goal; only the part over it is coloured: yellow up to 10 % over, red beyond.' : ''}
         </div>
       </div>
     </div>

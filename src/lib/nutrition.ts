@@ -126,6 +126,16 @@ export function kcalStatus(kcal: number, goal: number): KcalStatus {
 }
 export const KCAL_COLOR: Record<KcalStatus, string> = { none: '#F3E6DF', within: 'var(--accent)', over: 'var(--est)', way_over: 'var(--danger)' };
 
+/**
+ * Calories split for drawing: the part up to the goal is always green; only the part over it
+ * takes the over colour (yellow up to 10 % over, red beyond). Without a goal it's all `within`.
+ */
+export function kcalParts(kcal: number, goal: number): { within: number; over: number; overColor: string } {
+  const status = kcalStatus(kcal, goal);
+  if (status === 'none' || status === 'within') return { within: Math.max(0, kcal), over: 0, overColor: KCAL_COLOR.within };
+  return { within: goal, over: kcal - goal, overColor: KCAL_COLOR[status] };
+}
+
 export type ProteinStatus = 'none' | 'met' | 'close' | 'short';
 /** Protein reached (≥ 90 % of target), close (≥ 75 %) or short. 'none' without a target or food. */
 export function proteinStatus(protein: number, target: number, anyEaten: boolean): ProteinStatus {
