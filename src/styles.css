@@ -131,6 +131,8 @@ button.row:active, .row-btn:active { background: var(--bg); }
 .macro-val { font-size: 20px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .macro-val small { font-size: 12px; color: var(--muted); font-weight: 500; }
 .macro-sub { font-size: 11px; color: var(--muted); margin-top: 1px; font-variant-numeric: tabular-nums; }
+.macro-goal { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(43, 34, 36, .1); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.macro-goal span { display: block; font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .tag { display: inline-block; margin-top: 8px; height: 20px; line-height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: rgba(43, 34, 36, .08); white-space: nowrap; }
 .tag.none { background: rgba(43, 34, 36, .06); color: var(--muted); }
 .tag.on { color: var(--ink); } .tag.ok { color: var(--ink-2); } .tag.off { color: var(--rose-ink); }

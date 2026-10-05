@@ -71,12 +71,39 @@ export function macroTargets(s: Goals): MacroTargets {
   return { has: gramsKcal > 0, pct: { p: pct.p, f: pct.f, c: pct.c }, g: mg, pctSum, gramsKcal };
 }
 
+/**
+ * The macro goal re-expressed in the other mode, so switching % ⇄ grams keeps the same targets.
+ * % → grams uses the daily calorie goal (no calorie goal: the grams can't be known, so they're left empty).
+ * Grams → % uses the share of calories those grams make, rounded so the three add up to 100.
+ */
+export function convertMacroGoal(s: Goals, to: Goals['macroMode']): Goals['macroGoal'] {
+  if (to === s.macroMode) return s.macroGoal;
+  if (to === 'g') {
+    const t = macroTargets(s);
+    if (!(s.goal > 0) || !t.pctSum) return { p: '', f: '', c: '' };
+    return t.g;
+  }
+  const kcal = MACRO_KEYS.map(k => (+s.macroGoal[k] || 0) * KCAL_PER_G[k]);
+  const total = kcal.reduce((a, b) => a + b, 0);
+  if (!total) return { p: '', f: '', c: '' };
+  const raw = kcal.map(v => (v * 100) / total);
+  const pct = raw.map(Math.floor);
+  // hand the points lost to rounding down to the largest remainders
+  const order = raw.map((v, i) => [v - pct[i], i] as const).sort((a, b) => b[0] - a[0]);
+  for (let n = 100 - pct.reduce((a, b) => a + b, 0), j = 0; n > 0; n--, j++) pct[order[j % 3][1]]++;
+  return { p: pct[0], f: pct[1], c: pct[2] };
+}
+
 export type BalanceTag = 'none' | 'on' | 'ok' | 'off';
-/** On track within 3 points, acceptable within 8, otherwise off balance. */
-export function balanceTag(actualPct: number, targetPct: number, anyEaten: boolean): BalanceTag {
+/**
+ * How the share of calories from a macro compares with its goal. Protein is a floor: more is fine,
+ * falling short is the problem. Fat and carbs are ceilings: less is fine, going over is the problem.
+ * On track within 3 points on the wrong side, acceptable within 8, otherwise off balance.
+ */
+export function balanceTag(k: MacroKey, actualPct: number, targetPct: number, anyEaten: boolean): BalanceTag {
   if (!anyEaten) return 'none';
-  const dev = Math.abs(actualPct - targetPct);
-  return dev <= 3 ? 'on' : dev <= 8 ? 'ok' : 'off';
+  const miss = k === 'p' ? targetPct - actualPct : actualPct - targetPct;
+  return miss <= 3 ? 'on' : miss <= 8 ? 'ok' : 'off';
 }
 export const TAG_LABEL: Record<BalanceTag, string> = { none: '—', on: 'On track', ok: 'Acceptable', off: 'Off balance' };
 
@@ -98,6 +125,16 @@ export function kcalStatus(kcal: number, goal: number): KcalStatus {
   return kcal <= goal * 1.1 ? 'over' : 'way_over';
 }
 export const KCAL_COLOR: Record<KcalStatus, string> = { none: '#F3E6DF', within: 'var(--accent)', over: 'var(--est)', way_over: 'var(--danger)' };
+
+/**
+ * Calories split for drawing: the part up to the goal is always green; only the part over it
+ * takes the over colour (yellow up to 10 % over, red beyond). Without a goal it's all `within`.
+ */
+export function kcalParts(kcal: number, goal: number): { within: number; over: number; overColor: string } {
+  const status = kcalStatus(kcal, goal);
+  if (status === 'none' || status === 'within') return { within: Math.max(0, kcal), over: 0, overColor: KCAL_COLOR.within };
+  return { within: goal, over: kcal - goal, overColor: KCAL_COLOR[status] };
+}
 
 export type ProteinStatus = 'none' | 'met' | 'close' | 'short';
 /** Protein reached (≥ 90 % of target), close (≥ 75 %) or short. 'none' without a target or food. */

@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, SettingsIcon } from '../components/icons';
 import { DateStrip, MacroCards } from '../components/ui';
 import type { MacroCardData } from '../components/ui';
 import { dayLabel, shift } from '../lib/dates';
-import { amountLabel, balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalStatus, MACRO_KEYS, macroPct, macroTargets } from '../lib/nutrition';
+import { amountLabel, balanceTag, dayTotals, fmt, goalsOn, kcalParts, MACRO_KEYS, macroPct, macroTargets } from '../lib/nutrition';
 import type { MacroKey } from '../lib/nutrition';
 import type { Data, Item, Meal } from '../lib/types';
 
@@ -59,7 +59,12 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
   const meals = day?.meals ?? [];
   const tot = dayTotals(day);
   const hasGoal = s.goal > 0;
-  const progress = hasGoal ? Math.min(1, tot.kcal / s.goal) : 0;
+  // over the goal the ring stands for everything eaten: green up to the goal, the rest in the over colour
+  const parts = kcalParts(tot.kcal, s.goal);
+  const ringScale = Math.max(tot.kcal, s.goal, 1);
+  const RING = 2 * Math.PI * 36;
+  const greenLen = (RING * parts.within) / ringScale;
+  const overLen = (RING * parts.over) / ringScale;
   const targets = macroTargets(s);
   const actual = macroPct(tot);
   const cards = Object.fromEntries(
@@ -68,7 +73,7 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
       {
         pct: actual[k],
         sub: targets.has ? `goal ${targets.pct[k]}%` : `${Math.round(tot[k])} g`,
-        tag: balanceTag(actual[k], targets.pct[k], actual.kcal > 0)
+        tag: balanceTag(k, actual[k], targets.pct[k], actual.kcal > 0)
       }
     ])
   ) as Record<MacroKey, MacroCardData>;
@@ -118,16 +123,27 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
             <div className="secondary" style={{ marginTop: 8 }}>{goalLine}</div>
           </div>
           {hasGoal && (
-            <svg width="84" height="84" viewBox="0 0 84 84" style={{ transform: 'rotate(-90deg)' }} role="img" aria-label={`${Math.round(progress * 100)}% of daily goal`}>
+            <svg width="84" height="84" viewBox="0 0 84 84" style={{ transform: 'rotate(-90deg)' }} role="img" aria-label={`${Math.round((tot.kcal / s.goal) * 100)}% of daily goal`}>
               <circle cx="42" cy="42" r="36" fill="none" stroke="var(--rose)" strokeWidth="7" />
               <circle
                 cx="42" cy="42" r="36" fill="none"
-                stroke={KCAL_COLOR[kcalStatus(tot.kcal, s.goal)]}
+                stroke="var(--accent)"
                 strokeWidth="7"
                 strokeLinecap="round"
-                strokeDasharray={`${(2 * Math.PI * 36 * progress).toFixed(1)} 999`}
+                strokeDasharray={`${greenLen.toFixed(1)} 999`}
                 style={{ transition: 'stroke-dasharray .6s' }}
               />
+              {parts.over > 0 && (
+                <circle
+                  cx="42" cy="42" r="36" fill="none"
+                  stroke={parts.overColor}
+                  strokeWidth="7"
+                  strokeLinecap="round"
+                  strokeDasharray={`${overLen.toFixed(1)} 999`}
+                  strokeDashoffset={(-greenLen).toFixed(1)}
+                  style={{ transition: 'stroke-dasharray .6s, stroke-dashoffset .6s' }}
+                />
+              )}
             </svg>
           )}
         </div>

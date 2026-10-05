@@ -21,8 +21,8 @@ To try it on the phone, run `npm run dev -- --host` and open the LAN address in 
 | --- | --- |
 | Account | Required. Nothing opens until you sign in or create an account: email + password (confirmed by email, with password reset) or Google. One email is one account, whichever way you sign in |
 | Today, Week, Library, Settings, Add by hand, item and product sheets | Real. Data is saved to your account in Supabase, nothing is kept on the device |
-| Photos | Real camera (`capture`) and gallery pickers. Each photo is tagged plate or label; tap the tag to switch |
-| Voice note | Real. Recorded in the browser, transcribed by `gpt-transcribe` on the server. The text goes into the note, where you can edit it |
+| Photos | Real camera (`capture`) and gallery pickers. Each photo is copied into memory and scaled to 2048 px as soon as it's picked, so a photo that can't be read or opened is reported right away. Each photo is tagged plate or label; tap the tag to switch |
+| Voice note | Real. Recorded in the browser, transcribed by `gpt-transcribe` on the server. The text goes into the note, where you can edit it. Recognize can be pressed while the note is still recording or transcribing (or photos are still loading): it finishes those first |
 | Recognize | Real. Photos + note → foods, grams and nutrients with their sources, see below |
 | Export | Real. Settings → Export data downloads your data from the cloud as a JSON file |
 
@@ -65,7 +65,7 @@ src/
     remote.ts          database calls (rows, save_records)
     merge.ts           per-record conflict rules (newer wins), unsaved-record tracking
     supabase.ts        client and auth (password, Google, reset)
-    nutrition.ts       totals, macro % of calories, goal tags (On track ≤3 pts, Acceptable ≤8, else Off balance)
+    nutrition.ts       totals, macro % of calories, goal tags (protein may go over, fat and carbs may stay under; On track ≤3 pts the wrong way, Acceptable ≤8, else Off balance)
     recognize.ts       calls /api/recognize, maps the result to Review rows
     ai/                shared with the server: schema, prompt, generic food DB, nutrient maths
     voice.ts           voice note recording → /api/transcribe
