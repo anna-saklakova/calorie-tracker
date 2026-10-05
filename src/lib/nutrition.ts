@@ -72,11 +72,15 @@ export function macroTargets(s: Goals): MacroTargets {
 }
 
 export type BalanceTag = 'none' | 'on' | 'ok' | 'off';
-/** On track within 3 points, acceptable within 8, otherwise off balance. */
-export function balanceTag(actualPct: number, targetPct: number, anyEaten: boolean): BalanceTag {
+/**
+ * How the share of calories from a macro compares with its goal. Protein is a floor: more is fine,
+ * falling short is the problem. Fat and carbs are ceilings: less is fine, going over is the problem.
+ * On track within 3 points on the wrong side, acceptable within 8, otherwise off balance.
+ */
+export function balanceTag(k: MacroKey, actualPct: number, targetPct: number, anyEaten: boolean): BalanceTag {
   if (!anyEaten) return 'none';
-  const dev = Math.abs(actualPct - targetPct);
-  return dev <= 3 ? 'on' : dev <= 8 ? 'ok' : 'off';
+  const miss = k === 'p' ? targetPct - actualPct : actualPct - targetPct;
+  return miss <= 3 ? 'on' : miss <= 8 ? 'ok' : 'off';
 }
 export const TAG_LABEL: Record<BalanceTag, string> = { none: '—', on: 'On track', ok: 'Acceptable', off: 'Off balance' };
 

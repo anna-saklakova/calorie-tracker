@@ -48,7 +48,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
       {
         pct: actual[k],
         sub: `${Math.round(avgM[k])} g` + (targets.has ? ` · goal ${targets.pct[k]}%` + (targets.g[k] ? ` · ${targets.g[k]} g` : '') : ''),
-        tag: balanceTag(actual[k], targets.pct[k], actual.kcal > 0)
+        tag: balanceTag(k, actual[k], targets.pct[k], actual.kcal > 0)
       }
     ])
   ) as Record<MacroKey, MacroCardData>;

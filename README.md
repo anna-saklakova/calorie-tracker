@@ -65,7 +65,7 @@ src/
     remote.ts          database calls (rows, save_records)
     merge.ts           per-record conflict rules (newer wins), unsaved-record tracking
     supabase.ts        client and auth (password, Google, reset)
-    nutrition.ts       totals, macro % of calories, goal tags (On track ≤3 pts, Acceptable ≤8, else Off balance)
+    nutrition.ts       totals, macro % of calories, goal tags (protein may go over, fat and carbs may stay under; On track ≤3 pts the wrong way, Acceptable ≤8, else Off balance)
     recognize.ts       calls /api/recognize, maps the result to Review rows
     ai/                shared with the server: schema, prompt, generic food DB, nutrient maths
     voice.ts           voice note recording → /api/transcribe

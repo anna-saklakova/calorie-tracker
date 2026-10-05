@@ -68,7 +68,7 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
       {
         pct: actual[k],
         sub: targets.has ? `goal ${targets.pct[k]}%` : `${Math.round(tot[k])} g`,
-        tag: balanceTag(actual[k], targets.pct[k], actual.kcal > 0)
+        tag: balanceTag(k, actual[k], targets.pct[k], actual.kcal > 0)
       }
     ])
   ) as Record<MacroKey, MacroCardData>;

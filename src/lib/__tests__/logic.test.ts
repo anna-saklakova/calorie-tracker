@@ -17,11 +17,18 @@ describe('nutrition', () => {
     expect(macroPct({ p: 0, f: 0, c: 0 })).toMatchObject({ p: 0, f: 0, c: 0 });
   });
 
-  it('tags balance by deviation from target', () => {
-    expect(balanceTag(31, 30, true)).toBe('on');
-    expect(balanceTag(36, 30, true)).toBe('ok');
-    expect(balanceTag(45, 30, true)).toBe('off');
-    expect(balanceTag(0, 30, false)).toBe('none');
+  it('tags balance by how far a macro misses on the wrong side', () => {
+    // protein: more than the goal is fine, falling short is not
+    expect(balanceTag('p', 45, 30, true)).toBe('on');
+    expect(balanceTag('p', 27, 30, true)).toBe('on');
+    expect(balanceTag('p', 24, 30, true)).toBe('ok');
+    expect(balanceTag('p', 20, 30, true)).toBe('off');
+    // fat and carbs: less than the goal is fine, going over is not
+    expect(balanceTag('f', 15, 30, true)).toBe('on');
+    expect(balanceTag('f', 33, 30, true)).toBe('on');
+    expect(balanceTag('c', 36, 30, true)).toBe('ok');
+    expect(balanceTag('c', 45, 30, true)).toBe('off');
+    expect(balanceTag('p', 0, 30, false)).toBe('none');
   });
 
   it('derives targets in % and grams mode', () => {
