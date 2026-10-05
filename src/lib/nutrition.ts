@@ -71,6 +71,29 @@ export function macroTargets(s: Goals): MacroTargets {
   return { has: gramsKcal > 0, pct: { p: pct.p, f: pct.f, c: pct.c }, g: mg, pctSum, gramsKcal };
 }
 
+/**
+ * The macro goal re-expressed in the other mode, so switching % ⇄ grams keeps the same targets.
+ * % → grams uses the daily calorie goal (no calorie goal: the grams can't be known, so they're left empty).
+ * Grams → % uses the share of calories those grams make, rounded so the three add up to 100.
+ */
+export function convertMacroGoal(s: Goals, to: Goals['macroMode']): Goals['macroGoal'] {
+  if (to === s.macroMode) return s.macroGoal;
+  if (to === 'g') {
+    const t = macroTargets(s);
+    if (!(s.goal > 0) || !t.pctSum) return { p: '', f: '', c: '' };
+    return t.g;
+  }
+  const kcal = MACRO_KEYS.map(k => (+s.macroGoal[k] || 0) * KCAL_PER_G[k]);
+  const total = kcal.reduce((a, b) => a + b, 0);
+  if (!total) return { p: '', f: '', c: '' };
+  const raw = kcal.map(v => (v * 100) / total);
+  const pct = raw.map(Math.floor);
+  // hand the points lost to rounding down to the largest remainders
+  const order = raw.map((v, i) => [v - pct[i], i] as const).sort((a, b) => b[0] - a[0]);
+  for (let n = 100 - pct.reduce((a, b) => a + b, 0), j = 0; n > 0; n--, j++) pct[order[j % 3][1]]++;
+  return { p: pct[0], f: pct[1], c: pct[2] };
+}
+
 export type BalanceTag = 'none' | 'on' | 'ok' | 'off';
 /**
  * How the share of calories from a macro compares with its goal. Protein is a floor: more is fine,

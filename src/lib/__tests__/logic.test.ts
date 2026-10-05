@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { balanceTag, macroPct, macroTargets, scaleItem, fmt, sumMacros } from '../nutrition';
+import { balanceTag, convertMacroGoal, macroPct, macroTargets, scaleItem, fmt, sumMacros } from '../nutrition';
 import { dayLabel, shift, weekStartOf, weekLabel } from '../dates';
 import { authErrorText } from '../supabase';
 import { productPortion } from '../../components/Sheet';
@@ -73,5 +73,19 @@ describe('auth errors', () => {
     expect(authErrorText({ code: 'weak_password' })).toMatch(/at least 8/);
     expect(authErrorText({ code: 'over_email_send_rate_limit' })).toMatch(/Too many tries/);
     expect(authErrorText(new Error('Failed to fetch'))).toMatch(/connection/);
+  });
+
+  it('converts the macro goal when switching % and grams', () => {
+    const pct = { goal: 2000, macroMode: 'pct' as const, macroGoal: { p: 30, f: 30, c: 40 } };
+    // 600 kcal protein = 150 g, 600 kcal fat ≈ 67 g, 800 kcal carbs = 200 g
+    expect(convertMacroGoal(pct, 'g')).toEqual({ p: 150, f: 67, c: 200 });
+    expect(convertMacroGoal({ ...pct, goal: 0 }, 'g')).toEqual({ p: '', f: '', c: '' });
+    const g = { goal: 2000, macroMode: 'g' as const, macroGoal: { p: 150, f: 67, c: 200 } };
+    const back = convertMacroGoal(g, 'pct');
+    expect(back).toEqual({ p: 30, f: 30, c: 40 });
+    // shares that don't round to 100 still add up to 100
+    const odd = convertMacroGoal({ ...g, macroGoal: { p: 100, f: 50, c: 150 } }, 'pct');
+    expect(+odd.p + +odd.f + +odd.c).toBe(100);
+    expect(convertMacroGoal(pct, 'pct')).toBe(pct.macroGoal);
   });
 });
