@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { buildMeal } from '../src/lib/ai/meal.js';
 import { mealSchema, SYSTEM_PROMPT, userContent } from '../src/lib/ai/prompt.js';
-import type { IntermediateMeal, RecognizeRequest } from '../src/lib/ai/types.js';
+import type { IntermediateMeal, RecognizeRequest, RecognizeTrace } from '../src/lib/ai/types.js';
 import { authorize, config, fail, json, openai, tooBig } from './_lib/server.js';
 
 // POST /api/recognize — photos + note + transcript of one meal → foods, grams, nutrients, total.
@@ -32,18 +33,20 @@ export async function POST(req: Request): Promise<Response> {
     .slice(0, MAX_LIBRARY);
   if (!images.length && !text.trim() && !voice.trim()) return fail(400, 'Add a photo or a note first');
 
-  const content: unknown[] = [{ type: 'input_text', text: userContent(text, voice, library, images) }];
+  const inputText = userContent(text, voice, library, images);
+  const content: unknown[] = [{ type: 'input_text', text: inputText }];
   for (const img of images) {
     content.push({ type: 'input_text', text: `Image ${img.id}:` });
     // always high: people rarely tag label photos, and the small print on packaging needs it
     content.push({ type: 'input_image', image_url: img.dataUrl, detail: 'high' });
   }
 
+  const model = config.model();
   let out: { status?: string; output?: { type: string; content?: { type: string; text?: string; refusal?: string }[] }[] };
   try {
     out = await openai('responses', {
       json: {
-        model: config.model(),
+        model,
         instructions: SYSTEM_PROMPT,
         input: [{ role: 'user', content }],
         reasoning: { effort: 'medium' },
@@ -73,5 +76,13 @@ export async function POST(req: Request): Promise<Response> {
   if (!final.foods.length) {
     return json({ status: 'failed', message: meal.failure_reason?.trim() || 'Couldn’t find any food here. A clearer photo or a few words about the meal usually helps' });
   }
-  return json({ status: 'ok', meal: final });
+  // what went in and what the model answered, for the training examples the app keeps after the meal is saved
+  const trace: RecognizeTrace = {
+    model,
+    prompt_sha256: createHash('sha256').update(SYSTEM_PROMPT).digest('hex'),
+    commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+    input_text: inputText,
+    model_output: meal
+  };
+  return json({ status: 'ok', meal: final, trace });
 }

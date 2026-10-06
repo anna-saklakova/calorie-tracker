@@ -9,6 +9,8 @@ import { defaultMeal, mealLabels, r1, scaleItem } from './lib/nutrition';
 import type { MacroKey } from './lib/nutrition';
 import { loadPhoto } from './lib/images';
 import { recognize } from './lib/recognize';
+import type { Attempt } from './lib/recognize';
+import { saveExample } from './lib/dataset';
 import * as store from './lib/store';
 import { useData } from './lib/store';
 import { authAvailable, signOut, urlAuthError } from './lib/supabase';
@@ -82,6 +84,8 @@ export default function App() {
   const [macroSides, setMacroSides] = useState<Record<MacroKey, MacroSide>>({ p: 'g', f: 'pct', c: 'pct' });
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const abort = useRef<AbortController | null>(null);
+  // the recognitions behind the Review screen (the first, then each re-run with a correction), kept as a training example on save
+  const attempts = useRef<Attempt[]>([]);
 
   const go = (s: Screen) => {
     setScreen(s);
@@ -177,6 +181,7 @@ export default function App() {
         setFailMsg(res.message);
         go('failed');
       } else {
+        attempts.current = correction === undefined ? [res.attempt] : [...attempts.current, res.attempt];
         setReview(res.items);
         setReviewNotes(res.notes);
         if (correction) setDraft(d => ({ ...d, text: d.text + '\n' + correction }));
@@ -200,6 +205,9 @@ export default function App() {
     const where = draftTarget();
     store.addItems(draft.date, draft.meal, items, draft.snackId);
     toLib.forEach(store.upsertProduct);
+    // after the meal is saved and without waiting for it: the upload runs in the background
+    void saveExample(uid(), attempts.current, { date: draft.date, meal: draft.meal, items: review, savedIds: items.map(i => i.id) });
+    attempts.current = [];
     clearPhotos(draft.photos);
     setDraft(d => ({ ...d, text: '', photos: [] }));
     setReview([]);
