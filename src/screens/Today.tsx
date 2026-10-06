@@ -1,9 +1,9 @@
 import { useRef } from 'react';
 import { ChevronLeft, ChevronRight, SettingsIcon } from '../components/icons';
 import { DateStrip, MacroCards } from '../components/ui';
-import type { MacroCardData } from '../components/ui';
+import type { MacroCardData, MacroSide } from '../components/ui';
 import { dayLabel, shift } from '../lib/dates';
-import { amountLabel, balanceTag, dayTotals, fmt, goalsOn, kcalParts, MACRO_KEYS, macroPct, macroTargets } from '../lib/nutrition';
+import { amountLabel, balanceTag, dayTotals, fmt, goalsOn, kcalParts, MACRO_KEYS, macroPct, macroTargets, mealLabels, proteinTag } from '../lib/nutrition';
 import type { MacroKey } from '../lib/nutrition';
 import type { Data, Item, Meal } from '../lib/types';
 
@@ -14,6 +14,9 @@ interface Props {
   datePick: boolean;
   setDate: (d: string) => void;
   toggleDatePick: () => void;
+  /** which side each macro card shows: % of calories or grams */
+  macroSides: Record<MacroKey, MacroSide>;
+  flipMacro: (k: MacroKey) => void;
   openSettings: () => void;
   openItem: (meal: Meal, item: Item) => void;
   deleteItem: (meal: Meal, item: Item) => void;
@@ -52,7 +55,7 @@ function ItemRow({ item, units, onOpen, onLong }: { item: Item; units: Data['set
   );
 }
 
-export function Today({ data, date, today, datePick, setDate, toggleDatePick, openSettings, openItem, deleteItem }: Props) {
+export function Today({ data, date, today, datePick, setDate, toggleDatePick, macroSides, flipMacro, openSettings, openItem, deleteItem }: Props) {
   // the goals that applied on this day (goal changes don't rewrite the past)
   const s = goalsOn(data.settings, date);
   const day = data.days[date];
@@ -68,15 +71,23 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
   const targets = macroTargets(s);
   const actual = macroPct(tot);
   const cards = Object.fromEntries(
-    MACRO_KEYS.map(k => [
-      k,
-      {
-        pct: actual[k],
-        sub: targets.has ? `goal ${targets.pct[k]}%` : `${Math.round(tot[k])} g`,
-        tag: balanceTag(k, actual[k], targets.pct[k], actual.kcal > 0)
-      }
-    ])
+    MACRO_KEYS.map(k => {
+      // protein is judged by the grams reached; fat and carbs by their share of calories
+      const byGrams = k === 'p' && targets.g.p > 0;
+      const pt = byGrams ? proteinTag(tot.p, targets.g.p, actual.kcal > 0, date < today) : null;
+      return [
+        k,
+        {
+          pct: actual[k],
+          sub: targets.has ? `goal ${targets.pct[k]}%` : `${Math.round(tot[k])} g`,
+          tag: pt ? pt.tag : balanceTag(k, actual[k], targets.pct[k], actual.kcal > 0),
+          tagLabel: pt?.label,
+          back: { g: Math.round(tot[k]), sub: targets.g[k] ? `goal ${fmt(targets.g[k])} g` : `${actual[k]}% of kcal` }
+        }
+      ];
+    })
   ) as Record<MacroKey, MacroCardData>;
+  const labels = mealLabels(meals);
 
   const goalLine = hasGoal
     ? tot.kcal <= s.goal
@@ -149,7 +160,7 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <MacroCards data={cards} showTags={targets.has} />
+          <MacroCards data={cards} showTags={targets.has} sides={macroSides} onFlip={flipMacro} />
         </div>
 
         {!meals.length && (
@@ -163,7 +174,7 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
         {meals.map(m => (
           <section key={m.id} style={{ marginTop: 28 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '0 4px 10px' }}>
-              <h2 className="label" style={{ margin: 0, padding: 0 }}>{m.type}</h2>
+              <h2 className="label" style={{ margin: 0, padding: 0 }}>{labels[m.id]}</h2>
               <span className="num" style={{ fontSize: 13, color: 'var(--muted)' }}>{fmt(m.items.reduce((a, i) => a + (+i.kcal || 0), 0))} kcal</span>
             </div>
             <div className="card">

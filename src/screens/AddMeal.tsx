@@ -1,13 +1,15 @@
 import { useRef } from 'react';
 import { CameraIcon, ChevronDown, GalleryIcon, MicIcon } from '../components/icons';
-import { DateStrip, MealChips, SubHeader } from '../components/ui';
+import { DateStrip, MealPicker, SubHeader, snackOptions, targetName } from '../components/ui';
 import { fullDayLabel } from '../lib/dates';
 import type { VoiceNote } from '../lib/voice';
 import type { Draft } from '../App';
-import type { PhotoKind } from '../lib/types';
+import type { Day, PhotoKind } from '../lib/types';
 
 interface Props {
   draft: Draft;
+  /** the logged days, to offer the draft day's snacks */
+  days: Record<string, Day>;
   today: string;
   datePick: boolean;
   toggleDatePick: () => void;
@@ -22,7 +24,8 @@ interface Props {
   onRecognize: () => void;
 }
 
-export function AddMeal({ draft, today, datePick, toggleDatePick, setDraft, voice, photosLoading, addPhotos, removePhoto, onBack, onManual, onRecognize }: Props) {
+export function AddMeal({ draft, days, today, datePick, toggleDatePick, setDraft, voice, photosLoading, addPhotos, removePhoto, onBack, onManual, onRecognize }: Props) {
+  const snacks = snackOptions(days[draft.date]);
   const cam = useRef<HTMLInputElement>(null);
   const gal = useRef<HTMLInputElement>(null);
   const busyVoice = voice.recording || voice.transcribing;
@@ -39,12 +42,12 @@ export function AddMeal({ draft, today, datePick, toggleDatePick, setDraft, voic
       <SubHeader title="Add meal" onBack={onBack} />
       <div className="scroll pad-sub">
         <button onClick={toggleDatePick} aria-expanded={datePick} style={{ border: 'none', background: 'transparent', padding: '6px 4px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--muted)' }}>
-          {fullDayLabel(draft.date, today)} · {draft.meal}
+          {fullDayLabel(draft.date, today)} · {targetName(draft.meal, draft.snackId, snacks).replace(/^a new/, 'New')}
           <ChevronDown />
         </button>
-        {datePick && <DateStrip today={today} value={draft.date} onPick={d => setDraft(x => ({ ...x, date: d }))} style={{ padding: '6px 0 8px' }} />}
+        {datePick && <DateStrip today={today} value={draft.date} onPick={d => setDraft(x => ({ ...x, date: d, snackId: undefined }))} style={{ padding: '6px 0 8px' }} />}
         <div style={{ marginTop: 8 }}>
-          <MealChips value={draft.meal} onChange={meal => setDraft(d => ({ ...d, meal }))} />
+          <MealPicker value={draft.meal} snackId={draft.snackId} snacks={snacks} onChange={(meal, snackId) => setDraft(d => ({ ...d, meal, snackId }))} />
         </div>
 
         <div className="label" style={{ marginTop: 28 }}>Photos</div>
