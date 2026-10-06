@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { switchBasis } from '../../components/Sheet';
-import { goalsOn, KCAL_COLOR, kcalParts, kcalStatus, proteinStatus } from '../nutrition';
+import { goalsOn, KCAL_COLOR, kcalParts, kcalStatus, proteinStatus, proteinTag } from '../nutrition';
 import { getData, setData, updateSettings } from '../store';
 import { emptyData } from '../types';
 import type { Product } from '../types';
@@ -46,12 +46,21 @@ describe('day status', () => {
     expect(kcalStatus(2201, 2000)).toBe('way_over');
   });
 
-  it('marks protein met, close or short', () => {
-    expect(proteinStatus(135, 150, true)).toBe('met');
-    expect(proteinStatus(113, 150, true)).toBe('close');
-    expect(proteinStatus(100, 150, true)).toBe('short');
+  it('marks protein met by grams, close or short', () => {
+    expect(proteinStatus(150, 150, true)).toBe('met');
+    expect(proteinStatus(149.6, 150, true)).toBe('met');
+    expect(proteinStatus(149, 150, true)).toBe('close');
+    expect(proteinStatus(128, 150, true)).toBe('close');
+    expect(proteinStatus(127, 150, true)).toBe('short');
     expect(proteinStatus(0, 150, false)).toBe('none');
     expect(proteinStatus(50, 0, true)).toBe('none');
+  });
+
+  it('keeps the protein tag neutral while the day is still going', () => {
+    expect(proteinTag(80, 120, true, false)).toEqual({ tag: 'none', label: '40 g to go' });
+    expect(proteinTag(120, 120, true, false)).toEqual({ tag: 'on', label: 'Reached' });
+    expect(proteinTag(80, 120, true, true)).toEqual({ tag: 'off', label: 'Short' });
+    expect(proteinTag(110, 120, true, true)).toEqual({ tag: 'ok', label: 'Almost' });
   });
 });
 

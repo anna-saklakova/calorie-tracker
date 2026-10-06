@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus } from './components/icons';
 import { Sheet } from './components/Sheet';
+import { snackOptions, targetName } from './components/ui';
+import type { MacroSide } from './components/ui';
 import type { SheetState } from './components/Sheet';
 import { fullDayLabel, todayIso, weekStartOf } from './lib/dates';
-import { defaultMeal, r1, scaleItem } from './lib/nutrition';
+import { defaultMeal, mealLabels, r1, scaleItem } from './lib/nutrition';
+import type { MacroKey } from './lib/nutrition';
 import { loadPhoto } from './lib/images';
 import { recognize } from './lib/recognize';
+import type { Attempt } from './lib/recognize';
+import { saveExample } from './lib/dataset';
 import * as store from './lib/store';
 import { useData } from './lib/store';
 import { authAvailable, signOut, urlAuthError } from './lib/supabase';
@@ -28,6 +33,8 @@ const TABS: [Screen, string][] = [['today', 'Today'], ['week', 'Week'], ['librar
 export interface Draft {
   date: string;
   meal: MealType;
+  /** with Snack: the snack logged earlier that day to add to; none starts a new snack */
+  snackId?: string;
   text: string;
   photos: Photo[];
 }
@@ -73,8 +80,12 @@ export default function App() {
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [weekStart, setWeekStart] = useState(weekStartOf(today));
   const [toast, setToast] = useState<Toast | null>(null);
+  // macro cards on Today: protein in grams, fat and carbs in %, until flipped (not kept when the app is closed)
+  const [macroSides, setMacroSides] = useState<Record<MacroKey, MacroSide>>({ p: 'g', f: 'pct', c: 'pct' });
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const abort = useRef<AbortController | null>(null);
+  // the recognitions behind the Review screen (the first, then each re-run with a correction), kept as a training example on save
+  const attempts = useRef<Attempt[]>([]);
 
   const go = (s: Screen) => {
     setScreen(s);
@@ -126,7 +137,7 @@ export default function App() {
   const clearPhotos = (photos: Photo[]) => photos.forEach(p => URL.revokeObjectURL(p.url));
 
   const openAdd = () => {
-    setDraft(d => ({ ...d, date, meal: defaultMeal() }));
+    setDraft(d => ({ ...d, date, meal: defaultMeal(), snackId: undefined }));
     go('add');
   };
 
@@ -170,6 +181,7 @@ export default function App() {
         setFailMsg(res.message);
         go('failed');
       } else {
+        attempts.current = correction === undefined ? [res.attempt] : [...attempts.current, res.attempt];
         setReview(res.items);
         setReviewNotes(res.notes);
         if (correction) setDraft(d => ({ ...d, text: d.text + '\n' + correction }));
@@ -190,23 +202,31 @@ export default function App() {
     if (!review.length) return;
     const items: Item[] = review.map(it => ({ id: uid(), name: it.name.trim() || 'Item', amount: +it.amount || 0, kcal: +it.kcal || 0, p: +it.p || 0, f: +it.f || 0, c: +it.c || 0, amountSource: it.amountSource, nutritionSource: it.nutritionSource }));
     const toLib = review.filter(it => it.save && !inLibrary(it.name)).map(productFromItem);
-    store.addItems(draft.date, draft.meal, items);
+    const where = draftTarget();
+    store.addItems(draft.date, draft.meal, items, draft.snackId);
     toLib.forEach(store.upsertProduct);
+    // after the meal is saved and without waiting for it: the upload runs in the background
+    void saveExample(uid(), attempts.current, { date: draft.date, meal: draft.meal, items: review, savedIds: items.map(i => i.id) });
+    attempts.current = [];
     clearPhotos(draft.photos);
     setDraft(d => ({ ...d, text: '', photos: [] }));
     setReview([]);
     setReviewNotes([]);
     setDate(draft.date);
     go('today');
-    showToast(`Saved to ${draft.meal}` + (toLib.length ? ` · ${toLib.length} added to library` : ''));
+    showToast(`Saved to ${where}` + (toLib.length ? ` · ${toLib.length} added to library` : ''));
   };
 
+  /** The draft's meal as it reads in a toast, worked out before saving changes the day's snacks. */
+  const draftTarget = () => targetName(draft.meal, draft.snackId, snackOptions(data.days[draft.date]));
+
   const saveManual = () => {
-    store.addItems(draft.date, draft.meal, [{ id: uid(), name: man.name.trim(), amount: +man.amount || 0, kcal: +man.kcal || 0, p: +man.p || 0, f: +man.f || 0, c: +man.c || 0 }]);
+    const where = draftTarget();
+    store.addItems(draft.date, draft.meal, [{ id: uid(), name: man.name.trim(), amount: +man.amount || 0, kcal: +man.kcal || 0, p: +man.p || 0, f: +man.f || 0, c: +man.c || 0 }], draft.snackId);
     setMan(emptyManual());
     setDate(draft.date);
     go('today');
-    showToast(`Added to ${draft.meal}`);
+    showToast(`Added to ${where}`);
   };
 
   // ── Today item actions ────────────────────────────────────
@@ -274,8 +294,20 @@ export default function App() {
             setDatePick(false);
           }}
           toggleDatePick={() => setDatePick(p => !p)}
+          macroSides={macroSides}
+          flipMacro={k => setMacroSides(x => ({ ...x, [k]: x[k] === 'g' ? 'pct' : 'g' }))}
           openSettings={() => go('settings')}
-          openItem={(m, it) => setSheet({ type: 'item', date, mealId: m.id, mealType: m.type, draft: { ...it } })}
+          openItem={(m, it) =>
+            setSheet({
+              type: 'item',
+              date,
+              mealId: m.id,
+              mealLabel: mealLabels(data.days[date]?.meals ?? [])[m.id] ?? m.type,
+              draft: { ...it },
+              toType: m.type,
+              toSnackId: m.type === 'Snack' ? m.id : undefined
+            })
+          }
           deleteItem={(m, it) => removeItem(date, m, it)}
         />
       )}
@@ -283,6 +315,7 @@ export default function App() {
       {screen === 'add' && (
         <AddMeal
           draft={draft}
+          days={data.days}
           today={today}
           datePick={datePick}
           toggleDatePick={() => setDatePick(p => !p)}
@@ -310,7 +343,7 @@ export default function App() {
 
       {screen === 'review' && (
         <Review
-          subtitle={`${draft.meal} · ${fullDayLabel(draft.date, today)} · ${review.length} ${review.length === 1 ? 'item' : 'items'}`}
+          subtitle={`${draftTarget().replace(/^a new/, 'New')} · ${fullDayLabel(draft.date, today)} · ${review.length} ${review.length === 1 ? 'item' : 'items'}`}
           items={review}
           notes={reviewNotes}
           onBack={() => go('add')}
@@ -329,7 +362,9 @@ export default function App() {
           form={man}
           setForm={setMan}
           meal={draft.meal}
-          setMeal={meal => setDraft(d => ({ ...d, meal }))}
+          snackId={draft.snackId}
+          snacks={snackOptions(data.days[draft.date])}
+          setMeal={(meal, snackId) => setDraft(d => ({ ...d, meal, snackId }))}
           libCount={library.length}
           onBack={() => go('add')}
           onPickLibrary={() => {
@@ -353,7 +388,7 @@ export default function App() {
           onNew={() =>
             setSheet({ type: 'product', isNew: true, draft: { id: uid(), name: '', basis: '100', portion: 100, kcal: '' as unknown as number, p: '' as unknown as number, f: '' as unknown as number, c: '' as unknown as number, updatedAt: 0 }, addAmount: '100', addMeal: defaultMeal() })
           }
-          onOpen={p => setSheet({ type: 'product', isNew: false, draft: { ...p }, addAmount: p.basis === '100' ? '100' : '1', addMeal: picking ? draft.meal : defaultMeal() })}
+          onOpen={p => setSheet({ type: 'product', isNew: false, draft: { ...p }, addAmount: p.basis === '100' ? '100' : '1', addMeal: picking ? draft.meal : defaultMeal(), addSnackId: picking ? draft.snackId : undefined })}
         />
       )}
 
@@ -434,8 +469,12 @@ export default function App() {
           onClose={() => setSheet(null)}
           onSaveItem={s => {
             const it = s.draft;
-            store.updateItem(s.date, s.mealId, { ...it, name: it.name.trim(), amount: +it.amount || 0, kcal: +it.kcal || 0, p: +it.p || 0, f: +it.f || 0, c: +it.c || 0 });
+            const day = store.getData().days[s.date];
+            const moved = !store.staysInMeal(day, s.mealId, s.toType, s.toSnackId);
+            const where = targetName(s.toType, s.toSnackId, snackOptions(day));
+            store.saveItem(s.date, s.mealId, { ...it, name: it.name.trim(), amount: +it.amount || 0, kcal: +it.kcal || 0, p: +it.p || 0, f: +it.f || 0, c: +it.c || 0 }, s.toType, s.toSnackId);
             setSheet(null);
+            if (moved) showToast(`Moved to ${where}`);
           }}
           onDeleteItem={s => {
             const meal = store.getData().days[s.date]?.meals.find(m => m.id === s.mealId);
@@ -448,17 +487,19 @@ export default function App() {
             setSheet(null);
             showToast('Saved to library');
           }}
-          onAddProduct={(p, item, meal) => {
+          onAddProduct={(p, item, meal, snackId) => {
             store.upsertProduct(p);
             const d = picking ? draft.date : date;
-            store.addItems(d, meal, [{ ...item, id: uid() }]);
+            const where = targetName(meal, snackId, snackOptions(store.getData().days[d]));
+            store.addItems(d, meal, [{ ...item, id: uid() }], snackId);
             setSheet(null);
             setPicking(false);
             setDate(d);
             go('today');
-            showToast(`Added to ${meal}`);
+            showToast(`Added to ${where}`);
           }}
           inLibrary={inLibrary}
+          snacks={snackOptions(data.days[sheet.type === 'item' ? sheet.date : picking ? draft.date : date])}
           onAddToLibrary={it => {
             store.upsertProduct(productFromItem(it));
             showToast('Added to library');

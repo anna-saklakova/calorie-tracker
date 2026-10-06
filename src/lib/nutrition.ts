@@ -1,4 +1,4 @@
-import type { Day, Goals, Item, Macros, MealType, Settings } from './types';
+import type { Day, Goals, Item, Macros, Meal, MealType, Settings } from './types';
 
 /** Thin-space thousands separator, as in the design ("1 293"). */
 export const fmt = (n: number) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -137,9 +137,35 @@ export function kcalParts(kcal: number, goal: number): { within: number; over: n
 }
 
 export type ProteinStatus = 'none' | 'met' | 'close' | 'short';
-/** Protein reached (≥ 90 % of target), close (≥ 75 %) or short. 'none' without a target or food. */
+/**
+ * Protein judged by grams: met once the target grams are reached, close from 85 % of them, otherwise short.
+ * 'none' without a target or food.
+ */
 export function proteinStatus(protein: number, target: number, anyEaten: boolean): ProteinStatus {
   if (target <= 0 || !anyEaten) return 'none';
-  const r = protein / target;
-  return r >= 0.9 ? 'met' : r >= 0.75 ? 'close' : 'short';
+  const g = Math.round(protein);
+  return g >= target ? 'met' : g >= target * 0.85 ? 'close' : 'short';
+}
+
+/**
+ * The protein card's tag, judged by grams. While the day is still going, falling short isn't a verdict yet:
+ * the tag stays neutral and shows how much is left, and turns green as soon as the goal is reached.
+ */
+export function proteinTag(protein: number, target: number, anyEaten: boolean, dayDone: boolean): { tag: BalanceTag; label: string } {
+  const st = proteinStatus(protein, target, anyEaten);
+  if (st === 'none') return { tag: 'none', label: TAG_LABEL.none };
+  if (st === 'met') return { tag: 'on', label: 'Reached' };
+  if (!dayDone) return { tag: 'none', label: `${fmt(target - Math.round(protein))} g to go` };
+  return st === 'close' ? { tag: 'ok', label: 'Almost' } : { tag: 'off', label: 'Short' };
+}
+
+// ── Meal names ──────────────────────────────────────────────
+
+/**
+ * What each meal of a day is called. Snacks are separate meals: a single one is just "Snack",
+ * once there are more they're numbered in the order they were logged ("Snack 1", "Snack 2", …).
+ */
+export function mealLabels(meals: Meal[]): Record<string, string> {
+  const snacks = meals.filter(m => m.type === 'Snack');
+  return Object.fromEntries(meals.map(m => [m.id, m.type === 'Snack' && snacks.length > 1 ? `Snack ${snacks.indexOf(m) + 1}` : m.type]));
 }

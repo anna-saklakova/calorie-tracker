@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Exclaim } from '../components/icons';
-import { MealChips, NumInput, SubHeader, Switch } from '../components/ui';
+import { MealPicker, NumInput, SubHeader, Switch, targetName } from '../components/ui';
+import type { SnackOption } from '../components/ui';
 import { ANALYZE_CONTEXT, ANALYZE_STEPS } from '../lib/recognize';
 import { fmt, sumMacros } from '../lib/nutrition';
 import type { MealType, ReviewItem } from '../lib/types';
@@ -190,14 +191,16 @@ interface ManualProps {
   form: ManualForm;
   setForm: (f: ManualForm) => void;
   meal: MealType;
-  setMeal: (m: MealType) => void;
+  snackId?: string;
+  snacks: SnackOption[];
+  setMeal: (m: MealType, snackId?: string) => void;
   libCount: number;
   onBack: () => void;
   onPickLibrary: () => void;
   onSave: () => void;
 }
 
-export function Manual({ form, setForm, meal, setMeal, libCount, onBack, onPickLibrary, onSave }: ManualProps) {
+export function Manual({ form, setForm, meal, snackId, snacks, setMeal, libCount, onBack, onPickLibrary, onSave }: ManualProps) {
   const invalid = !form.name.trim() || form.kcal === '' || !(+form.kcal >= 0);
   const set = (k: keyof ManualForm) => (v: string) => setForm({ ...form, [k]: v });
   const fields: [keyof ManualForm, string, boolean][] = [['amount', 'Amount g', true], ['kcal', 'kcal', true], ['p', 'Protein', false], ['f', 'Fat', false], ['c', 'Carbs', false]];
@@ -226,11 +229,11 @@ export function Manual({ form, setForm, meal, setMeal, libCount, onBack, onPickL
         </div>
         <div className="label" style={{ marginTop: 22 }}>Meal</div>
         <div style={{ marginTop: 10 }}>
-          <MealChips value={meal} onChange={setMeal} />
+          <MealPicker value={meal} snackId={snackId} snacks={snacks} onChange={setMeal} />
         </div>
       </div>
       <div className="footer">
-        <button className="btn-primary" disabled={invalid} onClick={onSave}>Add to {meal}</button>
+        <button className="btn-primary" disabled={invalid} onClick={onSave}>Add to {targetName(meal, snackId, snacks)}</button>
       </div>
     </div>
   );

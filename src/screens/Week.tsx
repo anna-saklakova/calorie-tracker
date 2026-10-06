@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from '../components/icons';
 import { MacroCards } from '../components/ui';
 import type { MacroCardData } from '../components/ui';
 import { parse, shift, WD, weekLabel } from '../lib/dates';
-import { balanceTag, dayTotals, fmt, goalsOn, kcalParts, MACRO_KEYS, macroPct, macroTargets, proteinStatus } from '../lib/nutrition';
+import { balanceTag, dayTotals, fmt, goalsOn, kcalParts, MACRO_KEYS, macroPct, macroTargets, proteinStatus, proteinTag } from '../lib/nutrition';
 import type { MacroKey, ProteinStatus } from '../lib/nutrition';
 import type { Data } from '../lib/types';
 
@@ -33,7 +33,9 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
   const lastDay = days[6] <= today ? days[6] : today;
   const s = goalsOn(data.settings, lastDay);
   const hasGoal = s.goal > 0;
-  const logged = totals.filter(x => x.d <= today && x.t.kcal > 0);
+  // today isn't over yet, so the averages are of the finished days only
+  const logged = totals.filter(x => x.d < today && x.t.kcal > 0);
+  const todayPending = days.includes(today) && dayTotals(data.days[today]).kcal > 0;
   const avg = (k: 'kcal' | 'p' | 'f' | 'c') => (logged.length ? logged.reduce((a, x) => a + x.t[k], 0) / logged.length : 0);
   const avgM = { p: avg('p'), f: avg('f'), c: avg('c') };
   const maxK = Math.max(s.goal || 0, ...totals.map(x => x.t.kcal), 1);
@@ -43,16 +45,21 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
   const targets = macroTargets(s);
   const actual = macroPct(avgM);
   const cards = Object.fromEntries(
-    MACRO_KEYS.map(k => [
-      k,
-      {
-        pct: actual[k],
-        // actual average under the big %, the goal apart below it
-        sub: `${Math.round(avgM[k])} g`,
-        goal: targets.has ? `${targets.pct[k]}%` + (targets.g[k] ? ` · ${targets.g[k]} g` : '') : undefined,
-        tag: balanceTag(k, actual[k], targets.pct[k], actual.kcal > 0)
-      }
-    ])
+    MACRO_KEYS.map(k => {
+      // protein: the average grams against the goal in grams
+      const pt = k === 'p' && targets.g.p > 0 ? proteinTag(avgM.p, targets.g.p, actual.kcal > 0, true) : null;
+      return [
+        k,
+        {
+          pct: actual[k],
+          // actual average under the big %, the goal apart below it
+          sub: `${Math.round(avgM[k])} g`,
+          goal: targets.has ? `${targets.pct[k]}%` + (targets.g[k] ? ` · ${targets.g[k]} g` : '') : undefined,
+          tag: pt ? pt.tag : balanceTag(k, actual[k], targets.pct[k], actual.kcal > 0),
+          tagLabel: pt?.label
+        }
+      ];
+    })
   ) as Record<MacroKey, MacroCardData>;
   const showProtein = totals.some(x => x.targets.g.p > 0);
 
@@ -81,7 +88,9 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
             <span className="hero-unit">kcal / day</span>
           </div>
           <div className="secondary" style={{ marginTop: 8 }}>
-            {logged.length ? `${logged.length} of 7 days logged${hasGoal ? ` · goal ${fmt(s.goal)}` : ''}` : 'No meals logged this week'}
+            {logged.length
+              ? `${logged.length} ${logged.length === 1 ? 'day' : 'days'} logged${hasGoal ? ` · goal ${fmt(s.goal)}` : ''}${todayPending ? ' · today counts once it’s over' : ''}`
+              : todayPending ? 'Today counts once it’s over' : 'No meals logged this week'}
           </div>
         </div>
         <div className="label" style={{ marginTop: 24 }}>Average per day</div>
@@ -131,7 +140,9 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, marginTop: 10, borderTop: '1px solid var(--line-soft)', paddingTop: 10 }}>
                 {totals.map(x => {
-                  const st = x.d <= today ? proteinStatus(x.t.p, x.targets.g.p, x.t.kcal > 0) : 'none';
+                  // today gets its tick once the goal is reached; short or not isn't known before the day is over
+                  const raw = x.d <= today ? proteinStatus(x.t.p, x.targets.g.p, x.t.kcal > 0) : 'none';
+                  const st = x.d === today && raw !== 'met' ? 'none' : raw;
                   const mark = st === 'none' ? null : PROTEIN_MARK[st];
                   return (
                     <span key={x.d} aria-label={mark ? `${WD[parse(x.d).getDay()]}: ${mark[2]}, ${Math.round(x.t.p)} of ${x.targets.g.p} g` : undefined} style={{ textAlign: 'center', fontSize: 14, fontWeight: 700, lineHeight: '20px', color: mark ? mark[1] : 'var(--faint)' }}>
@@ -145,7 +156,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
           )}
         </div>
         <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 12, padding: '0 4px' }}>
-          Tap a bar to open that day.{hasGoal ? ' Green up to the goal; only the part over it is coloured: yellow up to 10 % over, red beyond.' : ''}
+          Tap a bar to open that day. Averages leave out today until it’s over.{hasGoal ? ' Green up to the goal; only the part over it is coloured: yellow up to 10 % over, red beyond.' : ''}
         </div>
       </div>
     </div>

@@ -55,16 +55,38 @@ function touchDay(d: Data, date: string, fn: (day: Day) => Day): Data {
   return { ...d, days: { ...d.days, [date]: { ...fn(day), updatedAt: Date.now() } } };
 }
 
-/** Adds items to the day's meal of that type; snacks always start a new meal. */
-export function addItems(date: string, type: MealType, items: Item[]) {
+/**
+ * Adds items to the day's meal of that type. Breakfast, lunch and dinner are one meal each; snacks are
+ * separate meals: the items go to the snack `mealId` names, or start a new snack when it's not given.
+ */
+function addTo(day: Day, type: MealType, items: Item[], mealId?: string): Day {
+  const existing = type !== 'Snack' ? day.meals.find(m => m.type === type) : mealId ? day.meals.find(m => m.id === mealId && m.type === 'Snack') : undefined;
+  const meals = existing
+    ? day.meals.map(m => (m === existing ? { ...m, items: [...m.items, ...items] } : m))
+    : [...day.meals, { id: uid(), type, items }];
+  meals.sort((a, b) => MEAL_ORDER.indexOf(a.type) - MEAL_ORDER.indexOf(b.type));
+  return { ...day, meals };
+}
+
+export function addItems(date: string, type: MealType, items: Item[], mealId?: string) {
+  update(d => touchDay(d, date, day => addTo(day, type, items, mealId)));
+}
+
+/** Whether saving an item into `type` / `mealId` keeps it in the meal it's in now. */
+export function staysInMeal(day: Day | undefined, fromMealId: string, type: MealType, mealId?: string) {
+  const from = day?.meals.find(m => m.id === fromMealId);
+  if (!from || from.type !== type) return false;
+  // a snack that is alone in its meal moved to a new snack would just be the same snack again
+  return type !== 'Snack' || mealId === fromMealId || (!mealId && from.items.length === 1);
+}
+
+/** Saves an edited item, moving it to another meal (or snack) when that was changed too. */
+export function saveItem(date: string, fromMealId: string, item: Item, type: MealType, mealId?: string) {
+  if (staysInMeal(data.days[date], fromMealId, type, mealId)) return updateItem(date, fromMealId, item);
   update(d =>
     touchDay(d, date, day => {
-      const existing = type !== 'Snack' ? day.meals.find(m => m.type === type) : undefined;
-      const meals = existing
-        ? day.meals.map(m => (m === existing ? { ...m, items: [...m.items, ...items] } : m))
-        : [...day.meals, { id: uid(), type, items }];
-      meals.sort((a, b) => MEAL_ORDER.indexOf(a.type) - MEAL_ORDER.indexOf(b.type));
-      return { ...day, meals };
+      const rest = day.meals.map(m => (m.id !== fromMealId ? m : { ...m, items: m.items.filter(i => i.id !== item.id) })).filter(m => m.items.length);
+      return addTo({ ...day, meals: rest }, type, [item], mealId);
     })
   );
 }
