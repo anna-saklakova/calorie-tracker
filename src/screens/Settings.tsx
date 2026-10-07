@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight } from '../components/icons';
 import { NumInput, Segmented, SubHeader } from '../components/ui';
-import { macroTargets } from '../lib/nutrition';
+import { convertMacroGoal, macroTargets } from '../lib/nutrition';
 import { liveLibrary, updateSettings } from '../lib/store';
 import { syncLabel } from '../lib/sync';
 import type { SyncState } from '../lib/sync';
@@ -97,7 +97,7 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
                 <div style={{ fontSize: 16, fontWeight: 600 }}>Macro goal</div>
                 <div className="row-sub">{s.macroMode === 'pct' ? 'Share of calories from each' : 'Grams per day'}</div>
               </div>
-              <Segmented<S['macroMode']> value={s.macroMode} options={[['pct', '%'], ['g', 'Grams']]} onChange={m => updateSettings({ macroMode: m })} />
+              <Segmented<S['macroMode']> value={s.macroMode} options={[['pct', '%'], ['g', 'Grams']]} onChange={m => updateSettings({ macroMode: m, macroGoal: convertMacroGoal(s, m) })} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginTop: 12 }}>
               {MACROS.map(([k, label, color]) => (

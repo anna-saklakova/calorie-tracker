@@ -21,8 +21,8 @@ To try it on the phone, run `npm run dev -- --host` and open the LAN address in 
 | --- | --- |
 | Account | Required. Nothing opens until you sign in or create an account: email + password (confirmed by email, with password reset) or Google. One email is one account, whichever way you sign in |
 | Today, Week, Library, Settings, Add by hand, item and product sheets | Real. Data is saved to your account in Supabase, nothing is kept on the device |
-| Photos | Real camera (`capture`) and gallery pickers. Each photo is tagged plate or label; tap the tag to switch |
-| Voice note | Real. Recorded in the browser, transcribed by `gpt-transcribe` on the server. The text goes into the note, where you can edit it |
+| Photos | Real camera (`capture`) and gallery pickers. Each photo is copied into memory and scaled to 2048 px as soon as it's picked, so a photo that can't be read or opened is reported right away. Each photo is tagged plate or label; tap the tag to switch |
+| Voice note | Real. Recorded in the browser, transcribed by `gpt-transcribe` on the server. The text goes into the note, where you can edit it. Recognize can be pressed while the note is still recording or transcribing (or photos are still loading): it finishes those first |
 | Recognize | Real. Photos + note → foods, grams and nutrients with their sources, see below |
 | Export | Real. Settings → Export data downloads your data from the cloud as a JSON file |
 
@@ -37,7 +37,7 @@ The model gets up to 110 s (the function 120 s, the app waits 130 s); the Analyz
 ### Goals on Today and Week
 
 - Today shows the calories **left** to the goal as the big number, with "eaten of goal" underneath. Settings has a **Minimum** too: the least to eat on a full day. Today shows how far it is; on Week a finished day that stayed below it is a hollow bar, and the minimum is a second dashed line.
-- Today has one protein panel instead of three macro cards. It compares the protein eaten with the calories eaten: the missing grams must still fit into the calories left. Green when the rest of the day needs no more protein per kcal than the day's average (up to 1.2×), yellow up to 1.6× (protein-rich meals will catch up), red above that. The tick on the bar is where the protein "should" be by now; 90 % of the target counts as reached, like the weekly marks (`src/lib/nutrition.ts`, `proteinPace`).
+- Today has one protein panel instead of three macro cards. It compares the protein eaten with the calories eaten: the missing grams must still fit into the calories left. Green when the rest of the day needs no more protein per kcal than the day's average (up to 1.2×), yellow up to 1.6× (protein-rich meals will catch up), red above that. The tick on the bar is where the protein "should" be by now. Reached and almost (from 85 %) follow the same rule as the weekly marks, so from 85 % the panel is never worse than yellow (`src/lib/nutrition.ts`, `proteinPace`).
 - Week keeps the three macro cards (averages) and marks each day's protein with a filled ✓ / ~ / ✕ circle.
 
 ## Supabase setup
@@ -73,7 +73,7 @@ src/
     remote.ts          database calls (rows, save_records)
     merge.ts           per-record conflict rules (newer wins), unsaved-record tracking
     supabase.ts        client and auth (password, Google, reset)
-    nutrition.ts       totals, macro % of calories, goal tags (On track ≤3 pts, Acceptable ≤8, else Off balance), day status with the minimum, protein pace
+    nutrition.ts       totals, macro % of calories, goal tags (protein may go over, fat and carbs may stay under; On track ≤3 pts the wrong way, Acceptable ≤8, else Off balance), day status with the minimum, protein pace
     recognize.ts       calls /api/recognize, maps the result to Review rows
     ai/                shared with the server: schema, prompt, generic food DB, nutrient maths
     voice.ts           voice note recording → /api/transcribe

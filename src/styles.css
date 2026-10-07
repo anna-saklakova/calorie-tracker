@@ -102,6 +102,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .chip { height: 38px; padding: 0 15px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 14px; font-weight: 600; }
 .chip.on { background: var(--ink); border-color: var(--ink); color: #fff; }
 .chip.sm { height: 34px; padding: 0 13px; font-size: 13px; }
+.snack-chips { margin-top: 10px; padding-left: 12px; border-left: 2px solid var(--line); }
+.chip-sub { margin-left: 6px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip.on .chip-sub { color: rgba(255, 255, 255, .7); }
 
 /* date strip */
 .strip { display: flex; gap: 8px; overflow-x: auto; }
@@ -127,10 +130,18 @@ button.row:active, .row-btn:active { background: var(--bg); }
 .macro.ok { background: var(--est-soft); } .macro.ok .macro-name { color: var(--est-ink); }
 .macro.off { background: var(--rose); } .macro.off .macro-name { color: var(--rose-ink); }
 .macro.none { background: var(--surface); } .macro.none .macro-name { color: var(--muted); }
+.macro-flip { display: block; width: 100%; border: none; padding: 0; background: transparent; text-align: left; font: inherit; color: inherit; perspective: 700px; min-width: 0; }
+.macro-inner { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; height: 100%; position: relative; transition: transform .5s cubic-bezier(.3, .7, .3, 1); transform-style: preserve-3d; }
+.macro-flip.flipped .macro-inner { transform: rotateY(180deg); }
+.macro-inner .face { grid-area: 1 / 1; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.macro-inner .face-g { transform: rotateY(180deg); }
+@media (prefers-reduced-motion: reduce) { .macro-inner { transition: none; } }
 .macro-name { font-size: 12px; font-weight: 600; }
 .macro-val { font-size: 20px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .macro-val small { font-size: 12px; color: var(--muted); font-weight: 500; }
 .macro-sub { font-size: 11px; color: var(--muted); margin-top: 1px; font-variant-numeric: tabular-nums; }
+.macro-goal { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(43, 34, 36, .1); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.macro-goal span { display: block; font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .tag { display: inline-block; margin-top: 8px; height: 20px; line-height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: rgba(43, 34, 36, .08); white-space: nowrap; }
 .tag.none { background: rgba(43, 34, 36, .06); color: var(--muted); }
 .tag.on { color: var(--ink); } .tag.ok { color: var(--ink-2); } .tag.off { color: var(--rose-ink); }

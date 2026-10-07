@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
-import { MealChips, NumInput, Segmented } from './ui';
+import { MealPicker, NumInput, Segmented, targetName } from './ui';
+import type { SnackOption } from './ui';
 import { fmt, r1, scaleItem } from '../lib/nutrition';
 import type { Item, MealType, Product } from '../lib/types';
 
 export type SheetState =
-  | { type: 'item'; date: string; mealId: string; mealType: MealType; draft: Item }
-  | { type: 'product'; isNew: boolean; draft: Product; addAmount: string; addMeal: MealType };
+  /** `toType` / `toSnackId`: the meal the item is saved into, which can be changed to move it */
+  | { type: 'item'; date: string; mealId: string; mealLabel: string; draft: Item; toType: MealType; toSnackId?: string }
+  | { type: 'product'; isNew: boolean; draft: Product; addAmount: string; addMeal: MealType; addSnackId?: string };
 
 interface Props {
   sheet: SheetState;
@@ -14,11 +16,13 @@ interface Props {
   onSaveItem: (s: Extract<SheetState, { type: 'item' }>) => void;
   onDeleteItem: (s: Extract<SheetState, { type: 'item' }>) => void;
   onSaveProduct: (p: Product) => void;
-  onAddProduct: (p: Product, item: Item, meal: MealType) => void;
+  onAddProduct: (p: Product, item: Item, meal: MealType, snackId?: string) => void;
   onDeleteProduct: (p: Product) => void;
   /** for a logged item: whether a library product with its name exists, and how to add one */
   inLibrary: (name: string) => boolean;
   onAddToLibrary: (item: Item) => void;
+  /** the snacks already logged on the item's day, or the day a product would be added to */
+  snacks: SnackOption[];
 }
 
 type Num = number | '';
@@ -50,7 +54,7 @@ export function productPortion(p: Product, amount: number) {
   };
 }
 
-export function Sheet({ sheet, setSheet, onClose, onSaveItem, onDeleteItem, onSaveProduct, onAddProduct, onDeleteProduct, inLibrary, onAddToLibrary }: Props) {
+export function Sheet({ sheet, setSheet, onClose, onSaveItem, onDeleteItem, onSaveProduct, onAddProduct, onDeleteProduct, inLibrary, onAddToLibrary, snacks }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -69,7 +73,7 @@ export function Sheet({ sheet, setSheet, onClose, onSaveItem, onDeleteItem, onSa
     product = { per100: sheet.draft.basis === '100', addAmt, add: productPortion(sheet.draft, addAmt) };
   }
 
-  const title = isItem ? sheet.mealType : sheet.isNew ? 'New product' : 'Product';
+  const title = isItem ? sheet.mealLabel : sheet.isNew ? 'New product' : 'Product';
   const canDelete = isItem || !sheet.isNew;
 
   const primary = () => {
@@ -79,7 +83,7 @@ export function Sheet({ sheet, setSheet, onClose, onSaveItem, onDeleteItem, onSa
     const clean: Product = { ...p, name: p.name.trim(), kcal: +p.kcal || 0, p: +p.p || 0, f: +p.f || 0, c: +p.c || 0, portion: +p.portion || 100 };
     if (sheet.isNew) return onSaveProduct(clean);
     const a = productPortion(clean, +sheet.addAmount || 0);
-    onAddProduct(clean, { id: '', name: clean.name, amount: a.grams, kcal: a.kcal, p: a.p, f: a.f, c: a.c, portions: a.portions }, sheet.addMeal);
+    onAddProduct(clean, { id: '', name: clean.name, amount: a.grams, kcal: a.kcal, p: a.p, f: a.f, c: a.c, portions: a.portions }, sheet.addMeal, sheet.addSnackId);
   };
 
   return (
@@ -139,6 +143,15 @@ export function Sheet({ sheet, setSheet, onClose, onSaveItem, onDeleteItem, onSa
           </div>
         </div>
 
+        {sheet.type === 'item' && (
+          <>
+            <div className="label" style={{ marginTop: 18 }}>Meal</div>
+            <div style={{ marginTop: 10 }}>
+              <MealPicker small value={sheet.toType} snackId={sheet.toSnackId} snacks={snacks} onChange={(m, id) => setSheet({ ...sheet, toType: m, toSnackId: id })} />
+            </div>
+          </>
+        )}
+
         {sheet.type === 'product' && !sheet.isNew && product && (
           <>
             <div className="label" style={{ marginTop: 18 }}>Add to a meal</div>
@@ -151,13 +164,13 @@ export function Sheet({ sheet, setSheet, onClose, onSaveItem, onDeleteItem, onSa
                 <span className="num" style={{ fontSize: 14, color: 'var(--muted)' }}>= {fmt(product.add.kcal)} kcal</span>
               </div>
               <div style={{ marginTop: 12 }}>
-                <MealChips small value={sheet.addMeal} onChange={m => setSheet({ ...sheet, addMeal: m })} />
+                <MealPicker small value={sheet.addMeal} snackId={sheet.addSnackId} snacks={snacks} onChange={(m, id) => setSheet({ ...sheet, addMeal: m, addSnackId: id })} />
               </div>
             </div>
           </>
         )}
         <button className="btn-primary" style={{ marginTop: 14 }} onClick={primary} disabled={!d.name.trim()}>
-          {isItem ? 'Save changes' : sheet.isNew ? 'Save product' : `Add to ${sheet.addMeal}`}
+          {isItem ? 'Save changes' : sheet.isNew ? 'Save product' : `Add to ${targetName(sheet.addMeal, sheet.addSnackId, snacks)}`}
         </button>
         {sheet.type === 'item' &&
           (inLibrary(sheet.draft.name) ? (

@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Exclaim } from '../components/icons';
-import { MealChips, NumInput, SubHeader, Switch } from '../components/ui';
+import { MealPicker, NumInput, SubHeader, Switch, targetName } from '../components/ui';
+import type { SnackOption } from '../components/ui';
 import { ANALYZE_CONTEXT, ANALYZE_STEPS } from '../lib/recognize';
 import { fmt, sumMacros } from '../lib/nutrition';
 import type { MealType, ReviewItem } from '../lib/types';
 
 // ── Recognizing ─────────────────────────────────────────────
 
-export function Analyzing({ onCancel }: { onCancel: () => void }) {
+/** `preparing` replaces the steps while a voice note or photo is still being finished before recognition. */
+export function Analyzing({ preparing, onCancel }: { preparing?: string | null; onCancel: () => void }) {
   const [step, setStep] = useState(0);
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
@@ -27,7 +29,7 @@ export function Analyzing({ onCancel }: { onCancel: () => void }) {
         <div style={{ position: 'absolute', inset: 14, borderRadius: '50%', border: '3px solid transparent', borderTopColor: 'var(--accent)', animation: 'ctSpin 1.1s linear infinite' }} />
       </div>
       <div className="state-title" style={{ marginTop: 32 }}>Looking at your meal</div>
-      <div className="state-body" style={{ minHeight: 44 }}>{slow ? 'Still reading. Labels with a lot of small print can take a minute or two' : ANALYZE_STEPS[step]}</div>
+      <div className="state-body" style={{ minHeight: 44 }}>{preparing || (slow ? 'Still reading. Labels with a lot of small print can take a minute or two' : ANALYZE_STEPS[step])}</div>
       <div className="num" style={{ fontSize: 13, color: 'var(--faint)', marginTop: 8, minHeight: 18 }}>{seconds >= 5 ? `${seconds} s` : ''}</div>
       <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 20, textWrap: 'pretty' }}>{ANALYZE_CONTEXT}</div>
       <button onClick={onCancel} style={{ marginTop: 40, height: 44, padding: '0 20px', borderRadius: 999, border: 'none', background: 'transparent', fontSize: 15, color: 'var(--muted)' }}>
@@ -205,14 +207,16 @@ interface ManualProps {
   form: ManualForm;
   setForm: (f: ManualForm) => void;
   meal: MealType;
-  setMeal: (m: MealType) => void;
+  snackId?: string;
+  snacks: SnackOption[];
+  setMeal: (m: MealType, snackId?: string) => void;
   libCount: number;
   onBack: () => void;
   onPickLibrary: () => void;
   onSave: () => void;
 }
 
-export function Manual({ form, setForm, meal, setMeal, libCount, onBack, onPickLibrary, onSave }: ManualProps) {
+export function Manual({ form, setForm, meal, snackId, snacks, setMeal, libCount, onBack, onPickLibrary, onSave }: ManualProps) {
   const invalid = !form.name.trim() || form.kcal === '' || !(+form.kcal >= 0);
   const set = (k: keyof ManualForm) => (v: string) => setForm({ ...form, [k]: v });
   const fields: [keyof ManualForm, string, boolean][] = [['amount', 'Amount g', true], ['kcal', 'kcal', true], ['p', 'Protein', false], ['f', 'Fat', false], ['c', 'Carbs', false]];
@@ -241,11 +245,11 @@ export function Manual({ form, setForm, meal, setMeal, libCount, onBack, onPickL
         </div>
         <div className="label" style={{ marginTop: 22 }}>Meal</div>
         <div style={{ marginTop: 10 }}>
-          <MealChips value={meal} onChange={setMeal} />
+          <MealPicker value={meal} snackId={snackId} snacks={snacks} onChange={setMeal} />
         </div>
       </div>
       <div className="footer">
-        <button className="btn-primary" disabled={invalid} onClick={onSave}>Add to {meal}</button>
+        <button className="btn-primary" disabled={invalid} onClick={onSave}>Add to {targetName(meal, snackId, snacks)}</button>
       </div>
     </div>
   );

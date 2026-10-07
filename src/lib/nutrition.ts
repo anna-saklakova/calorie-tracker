@@ -1,4 +1,4 @@
-import type { Day, Goals, Item, Macros, MealType, Settings } from './types';
+import type { Day, Goals, Item, Macros, Meal, MealType, Settings } from './types';
 
 /** Thin-space thousands separator, as in the design ("1 293"). */
 export const fmt = (n: number) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -71,12 +71,39 @@ export function macroTargets(s: Goals): MacroTargets {
   return { has: gramsKcal > 0, pct: { p: pct.p, f: pct.f, c: pct.c }, g: mg, pctSum, gramsKcal };
 }
 
+/**
+ * The macro goal re-expressed in the other mode, so switching % ⇄ grams keeps the same targets.
+ * % → grams uses the daily calorie goal (no calorie goal: the grams can't be known, so they're left empty).
+ * Grams → % uses the share of calories those grams make, rounded so the three add up to 100.
+ */
+export function convertMacroGoal(s: Goals, to: Goals['macroMode']): Goals['macroGoal'] {
+  if (to === s.macroMode) return s.macroGoal;
+  if (to === 'g') {
+    const t = macroTargets(s);
+    if (!(s.goal > 0) || !t.pctSum) return { p: '', f: '', c: '' };
+    return t.g;
+  }
+  const kcal = MACRO_KEYS.map(k => (+s.macroGoal[k] || 0) * KCAL_PER_G[k]);
+  const total = kcal.reduce((a, b) => a + b, 0);
+  if (!total) return { p: '', f: '', c: '' };
+  const raw = kcal.map(v => (v * 100) / total);
+  const pct = raw.map(Math.floor);
+  // hand the points lost to rounding down to the largest remainders
+  const order = raw.map((v, i) => [v - pct[i], i] as const).sort((a, b) => b[0] - a[0]);
+  for (let n = 100 - pct.reduce((a, b) => a + b, 0), j = 0; n > 0; n--, j++) pct[order[j % 3][1]]++;
+  return { p: pct[0], f: pct[1], c: pct[2] };
+}
+
 export type BalanceTag = 'none' | 'on' | 'ok' | 'off';
-/** On track within 3 points, acceptable within 8, otherwise off balance. */
-export function balanceTag(actualPct: number, targetPct: number, anyEaten: boolean): BalanceTag {
+/**
+ * How the share of calories from a macro compares with its goal. Protein is a floor: more is fine,
+ * falling short is the problem. Fat and carbs are ceilings: less is fine, going over is the problem.
+ * On track within 3 points on the wrong side, acceptable within 8, otherwise off balance.
+ */
+export function balanceTag(k: MacroKey, actualPct: number, targetPct: number, anyEaten: boolean): BalanceTag {
   if (!anyEaten) return 'none';
-  const dev = Math.abs(actualPct - targetPct);
-  return dev <= 3 ? 'on' : dev <= 8 ? 'ok' : 'off';
+  const miss = k === 'p' ? targetPct - actualPct : actualPct - targetPct;
+  return miss <= 3 ? 'on' : miss <= 8 ? 'ok' : 'off';
 }
 export const TAG_LABEL: Record<BalanceTag, string> = { none: '—', on: 'On track', ok: 'Acceptable', off: 'Off balance' };
 
@@ -104,12 +131,48 @@ export function kcalStatus(kcal: number, goal: number, min = 0, dayDone = true):
 }
 export const KCAL_COLOR: Record<KcalStatus, string> = { none: '#F3E6DF', under: 'var(--est)', within: 'var(--accent)', over: 'var(--est)', way_over: 'var(--danger)' };
 
+/**
+ * Calories split for drawing: the part up to the goal is always green; only the part over it
+ * takes the over colour (yellow up to 10 % over, red beyond). Without a goal it's all `within`.
+ */
+export function kcalParts(kcal: number, goal: number): { within: number; over: number; overColor: string } {
+  const status = kcalStatus(kcal, goal);
+  if (status === 'none' || status === 'within') return { within: Math.max(0, kcal), over: 0, overColor: KCAL_COLOR.within };
+  return { within: goal, over: kcal - goal, overColor: KCAL_COLOR[status] };
+}
+
 export type ProteinStatus = 'none' | 'met' | 'close' | 'short';
-/** Protein reached (≥ 90 % of target), close (≥ 75 %) or short. 'none' without a target or food. */
+/**
+ * Protein judged by grams: met once the target grams are reached, close from 85 % of them, otherwise short.
+ * 'none' without a target or food.
+ */
 export function proteinStatus(protein: number, target: number, anyEaten: boolean): ProteinStatus {
   if (target <= 0 || !anyEaten) return 'none';
-  const r = protein / target;
-  return r >= 0.9 ? 'met' : r >= 0.75 ? 'close' : 'short';
+  const g = Math.round(protein);
+  return g >= target ? 'met' : g >= target * 0.85 ? 'close' : 'short';
+}
+
+/**
+ * The protein card's tag, judged by grams. While the day is still going, falling short isn't a verdict yet:
+ * the tag stays neutral and shows how much is left, and turns green as soon as the goal is reached.
+ */
+export function proteinTag(protein: number, target: number, anyEaten: boolean, dayDone: boolean): { tag: BalanceTag; label: string } {
+  const st = proteinStatus(protein, target, anyEaten);
+  if (st === 'none') return { tag: 'none', label: TAG_LABEL.none };
+  if (st === 'met') return { tag: 'on', label: 'Reached' };
+  if (!dayDone) return { tag: 'none', label: `${fmt(target - Math.round(protein))} g to go` };
+  return st === 'close' ? { tag: 'ok', label: 'Almost' } : { tag: 'off', label: 'Short' };
+}
+
+// ── Meal names ──────────────────────────────────────────────
+
+/**
+ * What each meal of a day is called. Snacks are separate meals: a single one is just "Snack",
+ * once there are more they're numbered in the order they were logged ("Snack 1", "Snack 2", …).
+ */
+export function mealLabels(meals: Meal[]): Record<string, string> {
+  const snacks = meals.filter(m => m.type === 'Snack');
+  return Object.fromEntries(meals.map(m => [m.id, m.type === 'Snack' && snacks.length > 1 ? `Snack ${snacks.indexOf(m) + 1}` : m.type]));
 }
 
 // ── Protein pace during the day ─────────────────────────────
@@ -131,20 +194,23 @@ export interface ProteinPace {
  * still fit into the calories that are left: the rest of the day would need `left / kcalLeft` grams
  * per kcal; a day at the target needs `target / goal`. Up to 1.2× that is on pace (green), up to 1.6×
  * is doable with protein-rich meals (yellow), above that the target is unlikely (red).
- * Reached means ≥ 90 % of the target, like the weekly marks.
+ * Reached and close follow proteinStatus (the target grams; from 85 % of them), so from 85 % the
+ * verdict is never worse than close, and the weekly marks agree with the panel.
  */
 export function proteinPace(protein: number, target: number, kcal: number, goal: number): ProteinPace {
   const left = Math.max(0, target - protein);
   const eatenShare = goal > 0 ? Math.min(1, kcal / goal) : 0;
   const expected = Math.round(target * eatenShare);
   const pace = (status: PaceStatus): ProteinPace => ({ status, left, expected, eatenShare });
-  if (target <= 0 || kcal <= 0) return pace('none');
-  if (protein >= target * 0.9) return pace('met');
+  const st = proteinStatus(protein, target, kcal > 0);
+  if (st === 'none') return pace('none');
+  if (st === 'met') return pace('met');
   if (goal <= 0) return pace('none');
   const kcalLeft = goal - kcal;
-  if (kcalLeft <= 0) return pace(protein >= target * 0.75 ? 'close' : 'behind');
+  if (kcalLeft <= 0) return pace(st === 'close' ? 'close' : 'behind');
   const needed = left / kcalLeft / (target / goal);
-  return pace(needed <= 1.2 ? 'on' : needed <= 1.6 ? 'close' : 'behind');
+  const byPace: PaceStatus = needed <= 1.2 ? 'on' : needed <= 1.6 ? 'close' : 'behind';
+  return pace(st === 'close' && byPace === 'behind' ? 'close' : byPace);
 }
 
 export const PACE_LABEL: Record<PaceStatus, string> = { none: '', met: 'Goal reached', on: 'On pace', close: 'A bit behind', behind: 'Falling behind' };

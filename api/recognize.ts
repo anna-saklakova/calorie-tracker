@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { buildMeal } from '../src/lib/ai/meal.js';
 import { mealSchema, SYSTEM_PROMPT, userContent } from '../src/lib/ai/prompt.js';
-import type { IntermediateMeal, RecognizeRequest } from '../src/lib/ai/types.js';
+import type { IntermediateMeal, RecognizeRequest, RecognizeTrace } from '../src/lib/ai/types.js';
 import { authorize, config, fail, json, openai, tooBig } from './_lib/server.js';
 import type { OpenAIError } from './_lib/server.js';
 
@@ -39,13 +40,15 @@ export async function POST(req: Request): Promise<Response> {
     .slice(0, MAX_LIBRARY);
   if (!images.length && !text.trim() && !voice.trim()) return fail(400, 'Add a photo or a note first', 'empty');
 
-  const content: unknown[] = [{ type: 'input_text', text: userContent(text, voice, library, images) }];
+  const inputText = userContent(text, voice, library, images);
+  const content: unknown[] = [{ type: 'input_text', text: inputText }];
   for (const img of images) {
     content.push({ type: 'input_text', text: `Image ${img.id}:` });
     // always high: people rarely tag label photos, and the small print on packaging needs it
     content.push({ type: 'input_image', image_url: img.dataUrl, detail: 'high' });
   }
 
+  const model = config.model();
   const started = Date.now();
   const imageBytes = images.reduce((s, i) => s + i.dataUrl.length, 0);
   let out: {
@@ -57,7 +60,7 @@ export async function POST(req: Request): Promise<Response> {
   try {
     out = await openai('responses', {
       json: {
-        model: config.model(),
+        model,
         instructions: SYSTEM_PROMPT,
         input: [{ role: 'user', content }],
         reasoning: { effort: config.reasoning() },
@@ -111,5 +114,13 @@ export async function POST(req: Request): Promise<Response> {
       code: 'no_food'
     });
   }
-  return json({ status: 'ok', meal: final, seconds: secs });
+  // what went in and what the model answered, for the training examples the app keeps after the meal is saved
+  const trace: RecognizeTrace = {
+    model,
+    prompt_sha256: createHash('sha256').update(SYSTEM_PROMPT).digest('hex'),
+    commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+    input_text: inputText,
+    model_output: meal
+  };
+  return json({ status: 'ok', meal: final, trace, seconds: secs });
 }

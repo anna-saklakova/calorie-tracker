@@ -110,4 +110,17 @@ export interface RecognizeFailure {
   code: string;
 }
 
-export type RecognizeResponse = { status: 'ok'; meal: FinalMeal; seconds?: number } | RecognizeFailure;
+/** What the model was given and answered, sent back so the app can keep it as a training example. */
+export interface RecognizeTrace {
+  model: string;
+  /** sha256 of the system prompt, so examples can be tied to the prompt they were made with */
+  prompt_sha256: string;
+  /** the deployed commit, when known */
+  commit: string | null;
+  /** the text part of the user message (note, transcript, library, photo list); the photos follow it */
+  input_text: string;
+  /** the model's own JSON answer, before nutrition sources were picked and the arithmetic done in code */
+  model_output: IntermediateMeal;
+}
+
+export type RecognizeResponse = { status: 'ok'; meal: FinalMeal; trace?: RecognizeTrace; seconds?: number } | RecognizeFailure;

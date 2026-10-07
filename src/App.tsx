@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus } from './components/icons';
 import { Sheet } from './components/Sheet';
+import { snackOptions, targetName } from './components/ui';
 import type { SheetState } from './components/Sheet';
 import { fullDayLabel, todayIso, weekStartOf } from './lib/dates';
-import { defaultMeal, r1, scaleItem } from './lib/nutrition';
+import { defaultMeal, mealLabels, r1, scaleItem } from './lib/nutrition';
+import { loadPhoto } from './lib/images';
 import { recognize } from './lib/recognize';
+import type { Attempt } from './lib/recognize';
+import { saveExample } from './lib/dataset';
 import * as store from './lib/store';
 import { useData } from './lib/store';
 import { authAvailable, signOut, urlAuthError } from './lib/supabase';
 import { endRecovery, fetchLatest, flush, reload, useSync } from './lib/sync';
+import { useVoiceNote } from './lib/voice';
 import { uid } from './lib/types';
 import type { Item, Meal, MealType, Photo, PhotoKind, Product, ReviewItem } from './lib/types';
 import { AddMeal } from './screens/AddMeal';
@@ -26,6 +31,8 @@ const TABS: [Screen, string][] = [['today', 'Today'], ['week', 'Week'], ['librar
 export interface Draft {
   date: string;
   meal: MealType;
+  /** with Snack: the snack logged earlier that day to add to; none starts a new snack */
+  snackId?: string;
   text: string;
   photos: Photo[];
 }
@@ -51,7 +58,17 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('today');
   const [date, setDate] = useState(today);
   const [datePick, setDatePick] = useState(false);
-  const [draft, setDraft] = useState<Draft>({ date: today, meal: defaultMeal(), text: '', photos: [] });
+  const [draft, setDraftState] = useState<Draft>({ date: today, meal: defaultMeal(), text: '', photos: [] });
+  // the latest draft, so Recognize can read what a voice note or a photo still loading adds after it was pressed
+  const draftRef = useRef(draft);
+  const setDraft = useCallback((fn: (d: Draft) => Draft) => {
+    draftRef.current = fn(draftRef.current);
+    setDraftState(draftRef.current);
+  }, []);
+  // photos are taken in one at a time; this settles when all picked so far are in (or failed)
+  const photoQueue = useRef<Promise<void>>(Promise.resolve());
+  const [photosLoading, setPhotosLoading] = useState(0);
+  const [preparing, setPreparing] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewItem[]>([]);
   const [reviewNotes, setReviewNotes] = useState<string[]>([]);
   const [fail, setFail] = useState({ message: '', detail: '' });
@@ -63,6 +80,8 @@ export default function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const abort = useRef<AbortController | null>(null);
+  // the recognitions behind the Review screen (the first, then each re-run with a correction), kept as a training example on save
+  const attempts = useRef<Attempt[]>([]);
 
   const go = (s: Screen) => {
     setScreen(s);
@@ -73,6 +92,8 @@ export default function App() {
     setToast({ msg, undo });
     toastTimer.current = setTimeout(() => setToast(null), undo ? 4000 : 2400);
   }, []);
+  // lives here, not on the Add screen, so a voice note pressed into Recognize keeps transcribing
+  const voice = useVoiceNote(t => setDraft(d => ({ ...d, text: (d.text ? d.text.trim() + ' ' : '') + t })), showToast);
 
   // A new account starts on Today, with nothing left over from the previous one.
   useEffect(() => {
@@ -81,6 +102,7 @@ export default function App() {
     setSheet(null);
     setPicking(false);
     setReview([]);
+    voice.cancel();
     setDraft(d => (clearPhotos(d.photos), { date: todayIso(), meal: defaultMeal(), text: '', photos: [] }));
   }, [sync.user?.id]);
 
@@ -93,6 +115,7 @@ export default function App() {
     if (screen === 'password') return go('settings'), true;
     if (screen === 'add' || screen === 'settings' || screen === 'week' || screen === 'library') {
       if (picking) return setPicking(false), go('manual'), true;
+      if (screen === 'add') voice.cancel();
       return go('today'), true;
     }
     return false;
@@ -110,8 +133,22 @@ export default function App() {
   const clearPhotos = (photos: Photo[]) => photos.forEach(p => URL.revokeObjectURL(p.url));
 
   const openAdd = () => {
-    setDraft(d => ({ ...d, date, meal: defaultMeal() }));
+    setDraft(d => ({ ...d, date, meal: defaultMeal(), snackId: undefined }));
     go('add');
+  };
+
+  /** Copies picked photos in one by one; a photo that can't be read or opened is reported right away. */
+  const addPhotos = (files: File[], kind: PhotoKind) => {
+    setPhotosLoading(n => n + files.length);
+    for (const file of files) {
+      photoQueue.current = photoQueue.current
+        .then(() => loadPhoto(file))
+        .then(
+          f => setDraft(d => ({ ...d, photos: [...d.photos, { id: uid(), kind, file: f, url: URL.createObjectURL(f) }] })),
+          e => showToast((e as Error).message || 'Couldn’t open this photo. Try a JPEG or PNG')
+        )
+        .finally(() => setPhotosLoading(n => n - 1));
+    }
   };
 
   const runRecognize = async (correction?: string) => {
@@ -120,8 +157,19 @@ export default function App() {
     abort.current = ac;
     go('analyzing');
     try {
+      if (correction === undefined) {
+        // Recognize can be pressed before a voice note is transcribed or a photo is in: finish those first
+        setPreparing(voice.recording || voice.transcribing ? 'Turning your voice note into text…' : photosLoading ? 'Adding your photos…' : null);
+        await Promise.all([voice.finish(), photoQueue.current]);
+        if (ac.signal.aborted) return;
+        setPreparing(null);
+        const d = draftRef.current;
+        // nothing came of them (the error is already in a toast): back to the Add screen
+        if (!d.text.trim() && !d.photos.length) return go('add');
+      }
+      const d = draftRef.current;
       const res = await recognize(
-        { photos: draft.photos, text: draft.text + (correction ? '\n' + correction : ''), library, correction, previous: correction !== undefined ? review : undefined },
+        { photos: d.photos, text: d.text + (correction ? '\n' + correction : ''), library, correction, previous: correction !== undefined ? review : undefined },
         ac.signal
       );
       if (ac.signal.aborted) return;
@@ -129,6 +177,7 @@ export default function App() {
         setFail({ message: res.message, detail: failureDetail(res.code, res.seconds) });
         go('failed');
       } else {
+        attempts.current = correction === undefined ? [res.attempt] : [...attempts.current, res.attempt];
         setReview(res.items);
         setReviewNotes(res.notes);
         if (correction) setDraft(d => ({ ...d, text: d.text + '\n' + correction }));
@@ -151,23 +200,31 @@ export default function App() {
     if (!review.length) return;
     const items: Item[] = review.map(it => ({ id: uid(), name: it.name.trim() || 'Item', amount: +it.amount || 0, kcal: +it.kcal || 0, p: +it.p || 0, f: +it.f || 0, c: +it.c || 0, amountSource: it.amountSource, nutritionSource: it.nutritionSource }));
     const toLib = review.filter(it => it.save && !inLibrary(it.name)).map(productFromItem);
-    store.addItems(draft.date, draft.meal, items);
+    const where = draftTarget();
+    store.addItems(draft.date, draft.meal, items, draft.snackId);
     toLib.forEach(store.upsertProduct);
+    // after the meal is saved and without waiting for it: the upload runs in the background
+    void saveExample(uid(), attempts.current, { date: draft.date, meal: draft.meal, items: review, savedIds: items.map(i => i.id) });
+    attempts.current = [];
     clearPhotos(draft.photos);
     setDraft(d => ({ ...d, text: '', photos: [] }));
     setReview([]);
     setReviewNotes([]);
     setDate(draft.date);
     go('today');
-    showToast(`Saved to ${draft.meal}` + (toLib.length ? ` · ${toLib.length} added to library` : ''));
+    showToast(`Saved to ${where}` + (toLib.length ? ` · ${toLib.length} added to library` : ''));
   };
 
+  /** The draft's meal as it reads in a toast, worked out before saving changes the day's snacks. */
+  const draftTarget = () => targetName(draft.meal, draft.snackId, snackOptions(data.days[draft.date]));
+
   const saveManual = () => {
-    store.addItems(draft.date, draft.meal, [{ id: uid(), name: man.name.trim(), amount: +man.amount || 0, kcal: +man.kcal || 0, p: +man.p || 0, f: +man.f || 0, c: +man.c || 0 }]);
+    const where = draftTarget();
+    store.addItems(draft.date, draft.meal, [{ id: uid(), name: man.name.trim(), amount: +man.amount || 0, kcal: +man.kcal || 0, p: +man.p || 0, f: +man.f || 0, c: +man.c || 0 }], draft.snackId);
     setMan(emptyManual());
     setDate(draft.date);
     go('today');
-    showToast(`Added to ${draft.meal}`);
+    showToast(`Added to ${where}`);
   };
 
   // ── Today item actions ────────────────────────────────────
@@ -236,7 +293,17 @@ export default function App() {
           }}
           toggleDatePick={() => setDatePick(p => !p)}
           openSettings={() => go('settings')}
-          openItem={(m, it) => setSheet({ type: 'item', date, mealId: m.id, mealType: m.type, draft: { ...it } })}
+          openItem={(m, it) =>
+            setSheet({
+              type: 'item',
+              date,
+              mealId: m.id,
+              mealLabel: mealLabels(data.days[date]?.meals ?? [])[m.id] ?? m.type,
+              draft: { ...it },
+              toType: m.type,
+              toSnackId: m.type === 'Snack' ? m.id : undefined
+            })
+          }
           deleteItem={(m, it) => removeItem(date, m, it)}
         />
       )}
@@ -244,30 +311,35 @@ export default function App() {
       {screen === 'add' && (
         <AddMeal
           draft={draft}
+          days={data.days}
           today={today}
           datePick={datePick}
           toggleDatePick={() => setDatePick(p => !p)}
-          setDraft={fn => setDraft(fn)}
-          addPhotos={(files: File[], kind: PhotoKind) => {
-            const added = files.map(file => ({ id: uid(), kind, file, url: URL.createObjectURL(file) }));
-            setDraft(d => ({ ...d, photos: [...d.photos, ...added] }));
-          }}
+          setDraft={setDraft}
+          voice={voice}
+          photosLoading={photosLoading}
+          addPhotos={addPhotos}
           removePhoto={id => {
             draft.photos.filter(p => p.id === id).forEach(p => URL.revokeObjectURL(p.url));
             setDraft(d => ({ ...d, photos: d.photos.filter(p => p.id !== id) }));
           }}
-          onBack={() => go('today')}
-          onManual={() => go('manual')}
+          onBack={() => {
+            voice.cancel();
+            go('today');
+          }}
+          onManual={() => {
+            voice.cancel();
+            go('manual');
+          }}
           onRecognize={() => runRecognize()}
-          onError={showToast}
         />
       )}
 
-      {screen === 'analyzing' && <Analyzing onCancel={cancelAnalyze} />}
+      {screen === 'analyzing' && <Analyzing preparing={preparing} onCancel={cancelAnalyze} />}
 
       {screen === 'review' && (
         <Review
-          subtitle={`${draft.meal} · ${fullDayLabel(draft.date, today)} · ${review.length} ${review.length === 1 ? 'item' : 'items'}`}
+          subtitle={`${draftTarget().replace(/^a new/, 'New')} · ${fullDayLabel(draft.date, today)} · ${review.length} ${review.length === 1 ? 'item' : 'items'}`}
           items={review}
           notes={reviewNotes}
           onBack={() => go('add')}
@@ -286,7 +358,9 @@ export default function App() {
           form={man}
           setForm={setMan}
           meal={draft.meal}
-          setMeal={meal => setDraft(d => ({ ...d, meal }))}
+          snackId={draft.snackId}
+          snacks={snackOptions(data.days[draft.date])}
+          setMeal={(meal, snackId) => setDraft(d => ({ ...d, meal, snackId }))}
           libCount={library.length}
           onBack={() => go('add')}
           onPickLibrary={() => {
@@ -310,7 +384,7 @@ export default function App() {
           onNew={() =>
             setSheet({ type: 'product', isNew: true, draft: { id: uid(), name: '', basis: '100', portion: 100, kcal: '' as unknown as number, p: '' as unknown as number, f: '' as unknown as number, c: '' as unknown as number, updatedAt: 0 }, addAmount: '100', addMeal: defaultMeal() })
           }
-          onOpen={p => setSheet({ type: 'product', isNew: false, draft: { ...p }, addAmount: p.basis === '100' ? '100' : '1', addMeal: picking ? draft.meal : defaultMeal() })}
+          onOpen={p => setSheet({ type: 'product', isNew: false, draft: { ...p }, addAmount: p.basis === '100' ? '100' : '1', addMeal: picking ? draft.meal : defaultMeal(), addSnackId: picking ? draft.snackId : undefined })}
         />
       )}
 
@@ -391,8 +465,12 @@ export default function App() {
           onClose={() => setSheet(null)}
           onSaveItem={s => {
             const it = s.draft;
-            store.updateItem(s.date, s.mealId, { ...it, name: it.name.trim(), amount: +it.amount || 0, kcal: +it.kcal || 0, p: +it.p || 0, f: +it.f || 0, c: +it.c || 0 });
+            const day = store.getData().days[s.date];
+            const moved = !store.staysInMeal(day, s.mealId, s.toType, s.toSnackId);
+            const where = targetName(s.toType, s.toSnackId, snackOptions(day));
+            store.saveItem(s.date, s.mealId, { ...it, name: it.name.trim(), amount: +it.amount || 0, kcal: +it.kcal || 0, p: +it.p || 0, f: +it.f || 0, c: +it.c || 0 }, s.toType, s.toSnackId);
             setSheet(null);
+            if (moved) showToast(`Moved to ${where}`);
           }}
           onDeleteItem={s => {
             const meal = store.getData().days[s.date]?.meals.find(m => m.id === s.mealId);
@@ -405,17 +483,19 @@ export default function App() {
             setSheet(null);
             showToast('Saved to library');
           }}
-          onAddProduct={(p, item, meal) => {
+          onAddProduct={(p, item, meal, snackId) => {
             store.upsertProduct(p);
             const d = picking ? draft.date : date;
-            store.addItems(d, meal, [{ ...item, id: uid() }]);
+            const where = targetName(meal, snackId, snackOptions(store.getData().days[d]));
+            store.addItems(d, meal, [{ ...item, id: uid() }], snackId);
             setSheet(null);
             setPicking(false);
             setDate(d);
             go('today');
-            showToast(`Added to ${meal}`);
+            showToast(`Added to ${where}`);
           }}
           inLibrary={inLibrary}
+          snacks={snackOptions(data.days[sheet.type === 'item' ? sheet.date : picking ? draft.date : date])}
           onAddToLibrary={it => {
             store.upsertProduct(productFromItem(it));
             showToast('Added to library');

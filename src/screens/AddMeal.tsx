@@ -1,31 +1,36 @@
 import { useRef } from 'react';
 import { CameraIcon, ChevronDown, GalleryIcon, MicIcon } from '../components/icons';
-import { DateStrip, MealChips, SubHeader } from '../components/ui';
+import { DateStrip, MealPicker, SubHeader, snackOptions, targetName } from '../components/ui';
 import { fullDayLabel } from '../lib/dates';
-import { useVoiceNote } from '../lib/voice';
+import type { VoiceNote } from '../lib/voice';
 import type { Draft } from '../App';
-import type { PhotoKind } from '../lib/types';
+import type { Day, PhotoKind } from '../lib/types';
 
 interface Props {
   draft: Draft;
+  /** the logged days, to offer the draft day's snacks */
+  days: Record<string, Day>;
   today: string;
   datePick: boolean;
   toggleDatePick: () => void;
   setDraft: (fn: (d: Draft) => Draft) => void;
+  voice: VoiceNote;
+  /** photos picked and still being read in */
+  photosLoading: number;
   addPhotos: (files: File[], kind: PhotoKind) => void;
   removePhoto: (id: string) => void;
   onBack: () => void;
   onManual: () => void;
   onRecognize: () => void;
-  onError: (msg: string) => void;
 }
 
-export function AddMeal({ draft, today, datePick, toggleDatePick, setDraft, addPhotos, removePhoto, onBack, onManual, onRecognize, onError }: Props) {
+export function AddMeal({ draft, days, today, datePick, toggleDatePick, setDraft, voice, photosLoading, addPhotos, removePhoto, onBack, onManual, onRecognize }: Props) {
+  const snacks = snackOptions(days[draft.date]);
   const cam = useRef<HTMLInputElement>(null);
   const gal = useRef<HTMLInputElement>(null);
-  const voice = useVoiceNote(t => setDraft(d => ({ ...d, text: (d.text ? d.text.trim() + ' ' : '') + t })), onError);
   const busyVoice = voice.recording || voice.transcribing;
-  const cantRecognize = busyVoice || (!draft.text.trim() && !draft.photos.length);
+  // a voice note still recording or transcribing, or photos still loading, are finished after Recognize is pressed
+  const cantRecognize = !busyVoice && !photosLoading && !draft.text.trim() && !draft.photos.length;
 
   const clock = `${Math.floor(voice.seconds / 60)}:${String(voice.seconds % 60).padStart(2, '0')}`;
   const recHint = voice.recording
@@ -37,12 +42,12 @@ export function AddMeal({ draft, today, datePick, toggleDatePick, setDraft, addP
       <SubHeader title="Add meal" onBack={onBack} />
       <div className="scroll pad-sub">
         <button onClick={toggleDatePick} aria-expanded={datePick} style={{ border: 'none', background: 'transparent', padding: '6px 4px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--muted)' }}>
-          {fullDayLabel(draft.date, today)} · {draft.meal}
+          {fullDayLabel(draft.date, today)} · {targetName(draft.meal, draft.snackId, snacks).replace(/^a new/, 'New')}
           <ChevronDown />
         </button>
-        {datePick && <DateStrip today={today} value={draft.date} onPick={d => setDraft(x => ({ ...x, date: d }))} style={{ padding: '6px 0 8px' }} />}
+        {datePick && <DateStrip today={today} value={draft.date} onPick={d => setDraft(x => ({ ...x, date: d, snackId: undefined }))} style={{ padding: '6px 0 8px' }} />}
         <div style={{ marginTop: 8 }}>
-          <MealChips value={draft.meal} onChange={meal => setDraft(d => ({ ...d, meal }))} />
+          <MealPicker value={draft.meal} snackId={draft.snackId} snacks={snacks} onChange={(meal, snackId) => setDraft(d => ({ ...d, meal, snackId }))} />
         </div>
 
         <div className="label" style={{ marginTop: 28 }}>Photos</div>
@@ -65,6 +70,11 @@ export function AddMeal({ draft, today, datePick, toggleDatePick, setDraft, addP
               >
                 ×
               </button>
+            </div>
+          ))}
+          {Array.from({ length: photosLoading }, (_, i) => (
+            <div key={`loading-${i}`} role="status" aria-label="Adding photo" style={{ flex: 'none', width: 96, height: 96, borderRadius: 18, background: 'var(--surface-2)', display: 'grid', placeItems: 'center' }}>
+              <span style={{ width: 22, height: 22, borderRadius: '50%', border: '3px solid transparent', borderTopColor: 'var(--accent)', animation: 'ctSpin 1.1s linear infinite' }} />
             </div>
           ))}
         </div>
@@ -99,7 +109,7 @@ export function AddMeal({ draft, today, datePick, toggleDatePick, setDraft, addP
           </div>
         </div>
 
-        <button className="btn-outline" style={{ marginTop: 18 }} onClick={() => { voice.cancel(); onManual(); }}>
+        <button className="btn-outline" style={{ marginTop: 18 }} onClick={onManual}>
           Add by hand or from library
         </button>
       </div>

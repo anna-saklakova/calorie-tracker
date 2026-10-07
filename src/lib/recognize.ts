@@ -3,7 +3,7 @@ import { r1 } from './nutrition';
 import { supabase } from './supabase';
 import { uid } from './types';
 import type { Photo, Product, ReviewItem, Source } from './types';
-import type { FinalFood, LibraryEntry, RecognizeRequest, RecognizeResponse } from './ai/types';
+import type { FinalFood, LibraryEntry, RecognizeRequest, RecognizeResponse, RecognizeTrace } from './ai/types';
 
 export interface RecognizeInput {
   photos: Pick<Photo, 'kind' | 'file'>[];
@@ -15,8 +15,22 @@ export interface RecognizeInput {
   previous?: ReviewItem[];
 }
 
+/** One recognition as it went: kept to become a training example once the meal is saved (see dataset.ts). */
+export interface Attempt {
+  at: string;
+  /** the correction typed on the Review screen, for a re-run */
+  correction: string | null;
+  /** the photos exactly as the model saw them */
+  images: RecognizeRequest['images'];
+  text: string;
+  library: LibraryEntry[];
+  trace: RecognizeTrace | null;
+  /** what the Review screen proposed */
+  proposed: ReviewItem[];
+}
+
 export type RecognizeResult =
-  | { status: 'ok'; items: ReviewItem[]; notes: string[] }
+  | { status: 'ok'; items: ReviewItem[]; notes: string[]; attempt: Attempt }
   | { status: 'failed'; message: string; code: string; seconds?: number };
 
 /** No answer from the server at all after this long (the server itself gives the model ~110 s). */
@@ -131,6 +145,7 @@ export const recognize: Recognizer = async (input, signal) => {
   if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
   const body: RecognizeRequest = { images, text: input.text, voiceTranscript: '', library: libraryEntries(input.library) };
+  const at = new Date().toISOString();
   const started = Date.now();
   const seconds = () => Math.round((Date.now() - started) / 1000);
   let res: Response;
@@ -160,5 +175,6 @@ export const recognize: Recognizer = async (input, signal) => {
   if (data.meal.unmatched_package_image_ids.length) notes.push('A label photo couldn’t be tied to a food, so it wasn’t used.');
   if (data.meal.foods.some(f => f.energy_fix === 'kj')) notes.push('A label listed energy in kJ; it was converted to kcal.');
   if (data.meal.foods.some(f => f.energy_fix === 'macros')) notes.push('A label’s calories didn’t match its protein, fat and carbs, so they were recalculated from those. Check the label values.');
-  return { status: 'ok', items, notes };
+  const attempt: Attempt = { at, correction: input.correction ?? null, images, text: body.text, library: body.library, trace: data.trace ?? null, proposed: items };
+  return { status: 'ok', items, notes, attempt };
 };

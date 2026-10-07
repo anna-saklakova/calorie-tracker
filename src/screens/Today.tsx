@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { ChevronLeft, ChevronRight, SettingsIcon } from '../components/icons';
 import { DateStrip } from '../components/ui';
 import { dayLabel, shift } from '../lib/dates';
-import { amountLabel, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalStatus, macroTargets, PACE_LABEL, proteinPace } from '../lib/nutrition';
+import { amountLabel, dayTotals, fmt, goalsOn, kcalParts, macroTargets, mealLabels, PACE_LABEL, proteinPace } from '../lib/nutrition';
 import type { PaceStatus } from '../lib/nutrition';
 import type { Data, Item, Meal } from '../lib/types';
 
@@ -104,8 +104,14 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
   const hasGoal = s.goal > 0;
   const min = s.min ?? 0;
   const dayDone = date < today;
-  const progress = hasGoal ? Math.min(1, tot.kcal / s.goal) : 0;
+  // over the goal the ring stands for everything eaten: green up to the goal, the rest in the over colour
+  const parts = kcalParts(tot.kcal, s.goal);
+  const ringScale = Math.max(tot.kcal, s.goal, 1);
+  const RING = 2 * Math.PI * 36;
+  const greenLen = (RING * parts.within) / ringScale;
+  const overLen = (RING * parts.over) / ringScale;
   const targets = macroTargets(s);
+  const labels = mealLabels(meals);
 
   // the big number is what's left to the goal; the total goes underneath
   const left = s.goal - tot.kcal;
@@ -124,7 +130,6 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
           ? `Below the minimum of ${fmt(min)}`
           : `${fmt(min - tot.kcal)} more to the minimum of ${fmt(min)}`
       : '';
-  const ringStatus = kcalStatus(tot.kcal, s.goal, min, dayDone);
   // where the minimum sits on the ring (the ring starts at the top, the svg is rotated −90°)
   const minAngle = hasGoal && min > 0 && min < s.goal ? (2 * Math.PI * min) / s.goal : null;
 
@@ -159,24 +164,35 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '26px 0 8px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <span className="hero" style={{ color: hasGoal && left < 0 ? KCAL_COLOR[ringStatus] : undefined }}>{hero}</span>
+              <span className="hero" style={{ color: hasGoal && left < 0 ? parts.overColor : undefined }}>{hero}</span>
               <span className="hero-unit">{heroUnit}</span>
             </div>
             <div className="secondary" style={{ marginTop: 8 }}>{sub}</div>
             {minLine && <div className="secondary" style={{ marginTop: 2, color: tot.kcal >= min ? 'var(--faint)' : dayDone ? 'var(--est)' : undefined }}>{minLine}</div>}
           </div>
           {hasGoal && (
-            <svg width="84" height="84" viewBox="0 0 84 84" style={{ transform: 'rotate(-90deg)', flex: 'none' }} role="img" aria-label={`${Math.round(progress * 100)}% of daily goal`}>
+            <svg width="84" height="84" viewBox="0 0 84 84" style={{ transform: 'rotate(-90deg)', flex: 'none' }} role="img" aria-label={`${Math.round((tot.kcal / s.goal) * 100)}% of daily goal`}>
               <circle cx="42" cy="42" r="36" fill="none" stroke="var(--rose)" strokeWidth="7" />
               <circle
                 cx="42" cy="42" r="36" fill="none"
-                stroke={KCAL_COLOR[ringStatus]}
+                stroke="var(--accent)"
                 strokeWidth="7"
                 strokeLinecap="round"
-                strokeDasharray={`${(2 * Math.PI * 36 * progress).toFixed(1)} 999`}
+                strokeDasharray={`${greenLen.toFixed(1)} 999`}
                 style={{ transition: 'stroke-dasharray .6s' }}
               />
-              {minAngle !== null && (
+              {parts.over > 0 && (
+                <circle
+                  cx="42" cy="42" r="36" fill="none"
+                  stroke={parts.overColor}
+                  strokeWidth="7"
+                  strokeLinecap="round"
+                  strokeDasharray={`${overLen.toFixed(1)} 999`}
+                  strokeDashoffset={(-greenLen).toFixed(1)}
+                  style={{ transition: 'stroke-dasharray .6s, stroke-dashoffset .6s' }}
+                />
+              )}
+              {minAngle !== null && parts.over === 0 && (
                 <circle cx={(42 + 36 * Math.cos(minAngle)).toFixed(1)} cy={(42 + 36 * Math.sin(minAngle)).toFixed(1)} r="2.6" fill="var(--ink-2)" />
               )}
             </svg>
@@ -198,7 +214,7 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
         {meals.map(m => (
           <section key={m.id} style={{ marginTop: 28 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '0 4px 10px' }}>
-              <h2 className="label" style={{ margin: 0, padding: 0 }}>{m.type}</h2>
+              <h2 className="label" style={{ margin: 0, padding: 0 }}>{labels[m.id]}</h2>
               <span className="num" style={{ fontSize: 13, color: 'var(--muted)' }}>{fmt(m.items.reduce((a, i) => a + (+i.kcal || 0), 0))} kcal</span>
             </div>
             <div className="card">

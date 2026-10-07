@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { switchBasis } from '../../components/Sheet';
-import { goalsOn, kcalStatus, proteinPace, proteinStatus } from '../nutrition';
+import { goalsOn, KCAL_COLOR, kcalParts, kcalStatus, proteinPace, proteinStatus, proteinTag } from '../nutrition';
 import { getData, setData, updateSettings } from '../store';
 import { emptyData } from '../types';
 import type { Product } from '../types';
@@ -46,12 +46,21 @@ describe('day status', () => {
     expect(kcalStatus(2201, 2000)).toBe('way_over');
   });
 
-  it('marks protein met, close or short', () => {
-    expect(proteinStatus(135, 150, true)).toBe('met');
-    expect(proteinStatus(113, 150, true)).toBe('close');
-    expect(proteinStatus(100, 150, true)).toBe('short');
+  it('marks protein met by grams, close or short', () => {
+    expect(proteinStatus(150, 150, true)).toBe('met');
+    expect(proteinStatus(149.6, 150, true)).toBe('met');
+    expect(proteinStatus(149, 150, true)).toBe('close');
+    expect(proteinStatus(128, 150, true)).toBe('close');
+    expect(proteinStatus(127, 150, true)).toBe('short');
     expect(proteinStatus(0, 150, false)).toBe('none');
     expect(proteinStatus(50, 0, true)).toBe('none');
+  });
+
+  it('keeps the protein tag neutral while the day is still going', () => {
+    expect(proteinTag(80, 120, true, false)).toEqual({ tag: 'none', label: '40 g to go' });
+    expect(proteinTag(120, 120, true, false)).toEqual({ tag: 'on', label: 'Reached' });
+    expect(proteinTag(80, 120, true, true)).toEqual({ tag: 'off', label: 'Short' });
+    expect(proteinTag(110, 120, true, true)).toEqual({ tag: 'ok', label: 'Almost' });
   });
 });
 
@@ -66,6 +75,13 @@ describe('library basis switch', () => {
 
   it('leaves empty fields empty', () => {
     expect(switchBasis({ ...p, kcal: '' as unknown as number }, '100').kcal).toBe('');
+  });
+
+  it('colours only the calories over the goal', () => {
+    expect(kcalParts(1800, 2000)).toEqual({ within: 1800, over: 0, overColor: KCAL_COLOR.within });
+    expect(kcalParts(2100, 2000)).toEqual({ within: 2000, over: 100, overColor: KCAL_COLOR.over });
+    expect(kcalParts(2500, 2000)).toEqual({ within: 2000, over: 500, overColor: KCAL_COLOR.way_over });
+    expect(kcalParts(1500, 0)).toEqual({ within: 1500, over: 0, overColor: KCAL_COLOR.within });
   });
 });
 
@@ -97,9 +113,11 @@ describe('protein pace', () => {
     expect(pace(0, 400)).toBe('close'); // a protein-free breakfast is
   });
 
-  it('is reached at 90 % whatever the calories, and judged by share once the calories are used up', () => {
-    expect(pace(110, 1900)).toBe('met');
-    expect(pace(100, 2100)).toBe('close');
+  it('is reached at the target grams, and never worse than close from 85 % of them', () => {
+    expect(pace(120, 1900)).toBe('met');
+    expect(pace(119.6, 1900)).toBe('met');
+    expect(pace(110, 1950)).toBe('close'); // 10 g in 50 kcal is a stretch, but 92 % is there
+    expect(pace(105, 2100)).toBe('close');
     expect(pace(60, 2100)).toBe('behind');
   });
 
