@@ -8,7 +8,7 @@ export const SYSTEM_PROMPT = `You analyse ONE meal for a calorie tracker. You ge
 Return ONLY data that matches the JSON schema. Rules:
 1. Analyse all photos, the note and the transcript together as one meal.
 2. List only foods that were actually eaten. One entry = one food or ingredient (e.g. pasta, sauce, minced beef, broccoli — not "pasta dish").
-3. Packaging, cutlery, objects in the background and anything not eaten are NOT foods.
+3. Packaging, cutlery, objects in the background and anything not eaten are NOT foods. But a photo of a package or label together with a note that it was eaten ("40 g of this", "two scoops", "one bar") means the user ate that product: list it as a food and attach the label's data to it. With a package photo and no note, assume one serving of the product was eaten and say so in amount_basis.
 4. A package or nutrition label belongs only to the food it is for. Put its data in package_data of that food only, with the image ids in source_image_ids. If you can't tell which food a package belongs to (and the note doesn't say), don't attach it; list its image id in unmatched_package_image_ids instead.
 5. Amount priority: if the user states an exact weight ("rice 175 g"), use it unchanged with amount_source "user_exact". Never replace it with your own visual estimate.
 6. If the user gives an approximate weight ("about 175 g rice", "~120 g"), use that number with amount_source "user_estimate".
@@ -27,7 +27,7 @@ Return ONLY data that matches the JSON schema. Rules:
    - Protein powders have ~70–85 g protein per 100 g; whole foods never above ~35. If your reading is wildly off for the kind of product, re-read the table.
    - If the label is only per serving and the serving size in grams is visible, convert to per 100 g. If a value is not visible or not readable, use null. Never guess label values.
    - Only the nutrition table matters for package_data; ignore recipes and serving suggestions on the package except for the scoop/serving-size conversion in rule 8.
-11. library_product_id: the id of the user's own product only if it is clearly the same product (same item/brand). Otherwise null.
+11. library_product_id: the id of the user's own product only if it is clearly the same product (same item/brand), copied exactly from the list. Otherwise null.
 12. generic_food_id: the id of the closest generic food in the list below, matching the food AND its preparation (cooked vs raw). If none fits, null. Never pick a random one.
 13. estimate_per_100g: always give your best estimate of the nutrients per 100 g of the food as eaten. It is used only when there is no label, library or generic match.
 14. Do not calculate meal totals or nutrients for the eaten amount. The app does the arithmetic.
@@ -61,8 +61,12 @@ const per100Schema = {
   properties: { kcal: { type: 'number' }, protein_g: { type: 'number' }, fat_g: { type: 'number' }, carbs_g: { type: 'number' }, fiber_g: nullableNumber }
 };
 
-/** Strict JSON Schema for Structured Outputs. Ids are enums so the model can't invent a DB record. */
-export function mealSchema(libraryIds: string[], imageIds: string[]) {
+/**
+ * Strict JSON Schema for Structured Outputs. Generic food and image ids are enums so the model can't
+ * invent them. Library ids are a plain string (checked in code): an enum that changes with every saved
+ * product would make a new schema per request (slower first answer) and is capped at 250 values.
+ */
+export function mealSchema(imageIds: string[]) {
   const imageId = imageIds.length ? { type: 'string', enum: imageIds } : { type: 'string' };
   return {
     type: 'object',
@@ -104,7 +108,7 @@ export function mealSchema(libraryIds: string[], imageIds: string[]) {
                 }
               ]
             },
-            library_product_id: { type: ['string', 'null'], enum: [...libraryIds, null] },
+            library_product_id: { type: ['string', 'null'] },
             generic_food_id: { type: ['string', 'null'], enum: [...GENERIC_FOODS.map(f => f.id), null] },
             estimate_per_100g: per100Schema
           }

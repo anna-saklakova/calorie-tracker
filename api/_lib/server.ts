@@ -8,6 +8,8 @@ const env = (...names: string[]) => names.map(n => process.env[n]).find(v => v &
 export const config = {
   openaiKey: () => env('OPENAI_API_KEY'),
   model: () => env('OPENAI_MODEL') ?? 'gpt-5.4-mini',
+  /** how hard the model thinks before answering; 'low' is enough for reading a meal, 'medium' is slower */
+  reasoning: () => env('OPENAI_REASONING') ?? 'low',
   transcribeModel: () => env('OPENAI_TRANSCRIBE_MODEL') ?? 'gpt-transcribe',
   supabaseUrl: () => env('SUPABASE_URL', 'VITE_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'),
   supabaseAnonKey: () => env('SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')
@@ -16,7 +18,11 @@ export const config = {
 export const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 
-export const fail = (status: number, message: string) => json({ status: 'failed', message }, status);
+/**
+ * A failure the app can show. `message` is for the user; `code` is a short machine-readable reason
+ * (also shown on the Failed screen in small print), so a problem can be reported and found in the logs.
+ */
+export const fail = (status: number, message: string, code: string) => json({ status: 'failed', message, code }, status);
 
 /**
  * Lets the request through only for a signed-in user with quota left.
@@ -25,12 +31,12 @@ export const fail = (status: number, message: string) => json({ status: 'failed'
  */
 export async function authorize(req: Request, kind: QuotaKind): Promise<Response | null> {
   const token = req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
-  if (!token) return fail(401, 'Sign in to use recognition');
+  if (!token) return fail(401, 'Sign in to use recognition', 'not_signed_in');
   const url = config.supabaseUrl();
   const anon = config.supabaseAnonKey();
   if (!url || !anon || !config.openaiKey()) {
     console.error('recognition is not configured: missing', [!url && 'SUPABASE_URL', !anon && 'SUPABASE_ANON_KEY', !config.openaiKey() && 'OPENAI_API_KEY'].filter(Boolean).join(', '));
-    return fail(503, 'Recognition isn’t set up yet');
+    return fail(503, 'Recognition isn’t set up yet', 'not_configured');
   }
   let res: Response;
   try {
@@ -40,42 +46,61 @@ export async function authorize(req: Request, kind: QuotaKind): Promise<Response
       body: JSON.stringify({ p_kind: kind })
     });
   } catch {
-    return fail(502, 'Couldn’t reach your account. Try again');
+    return fail(502, 'Couldn’t reach your account. Try again', 'account_unreachable');
   }
-  if (res.status === 401 || res.status === 403) return fail(401, 'Your session expired. Sign in again');
+  if (res.status === 401 || res.status === 403) return fail(401, 'Your session expired. Sign in again', 'session_expired');
   if (res.status === 404) {
     console.error('consume_ai_quota is missing: run supabase/migrations/20261005000000_ai_quota.sql');
-    return fail(503, 'Recognition isn’t set up yet');
+    return fail(503, 'Recognition isn’t set up yet', 'quota_function_missing');
   }
   if (!res.ok) {
     console.error('quota check failed', res.status);
-    return fail(502, 'Couldn’t check your account. Try again');
+    return fail(502, 'Couldn’t check your account. Try again', `quota_check_${res.status}`);
   }
   // left today for this email; -1 = this email's daily limit, -2 = the app-wide daily limit
   const left = Number(await res.json());
   if (left === -2) {
     console.error(`app-wide daily ${kind} limit reached`);
-    return fail(429, kind === 'recognize' ? 'Recognition is paused for today. Add by hand, or try again tomorrow' : 'Voice notes are paused for today. Type the note instead');
+    return fail(429, kind === 'recognize' ? 'Recognition is paused for today. Add by hand, or try again tomorrow' : 'Voice notes are paused for today. Type the note instead', 'app_daily_limit');
   }
   if (!(left >= 0)) {
-    return fail(429, kind === 'recognize' ? 'You’ve reached today’s limit for recognition. Add by hand, or try again tomorrow' : 'You’ve reached today’s limit for voice notes. Type the note instead');
+    return fail(429, kind === 'recognize' ? 'You’ve reached today’s limit for recognition. Add by hand, or try again tomorrow' : 'You’ve reached today’s limit for voice notes. Type the note instead', 'daily_limit');
   }
   return null;
 }
 
-/** Calls OpenAI with the server key. Returns the parsed JSON or throws with the HTTP status. */
+/** What `openai()` throws when the API answers with an error or doesn't answer in time. */
+export interface OpenAIError extends Error {
+  /** HTTP status, or 0 when the request was stopped by the timeout */
+  status: number;
+  /** OpenAI's error code, e.g. 'invalid_json_schema', 'insufficient_quota' */
+  code: string;
+  /** short reason for the app's failure code */
+  reason: string;
+}
+
+/** Calls OpenAI with the server key. Returns the parsed JSON or throws an OpenAIError. */
 export async function openai(path: string, init: { json?: unknown; form?: FormData; signal?: AbortSignal }) {
-  const res = await fetch(`https://api.openai.com/v1/${path}`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${config.openaiKey()}`, ...(init.json ? { 'content-type': 'application/json' } : {}) },
-    body: init.json ? JSON.stringify(init.json) : init.form,
-    signal: init.signal
-  });
+  let res: Response;
+  try {
+    res = await fetch(`https://api.openai.com/v1/${path}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${config.openaiKey()}`, ...(init.json ? { 'content-type': 'application/json' } : {}) },
+      body: init.json ? JSON.stringify(init.json) : init.form,
+      signal: init.signal
+    });
+  } catch (e) {
+    const name = (e as Error).name;
+    const timedOut = name === 'TimeoutError' || name === 'AbortError';
+    console.error(`openai ${path} ${timedOut ? 'timed out' : 'unreachable'}`, timedOut ? '' : (e as Error).message);
+    throw Object.assign(new Error(timedOut ? 'timeout' : 'unreachable'), { status: 0, code: '', reason: timedOut ? 'timeout' : 'unreachable' }) as OpenAIError;
+  }
   if (!res.ok) {
-    // log only the status and error type, never the request (photos, notes)
-    const err = (await res.json().catch(() => null)) as { error?: { type?: string; code?: string } } | null;
-    console.error(`openai ${path} failed`, res.status, err?.error?.type, err?.error?.code);
-    throw Object.assign(new Error(`OpenAI ${res.status}`), { status: res.status });
+    // log the status and OpenAI's error (type, code, message); never the request itself (photos, notes)
+    const err = (await res.json().catch(() => null)) as { error?: { type?: string; code?: string; message?: string } } | null;
+    console.error(`openai ${path} failed`, res.status, err?.error?.type, err?.error?.code, err?.error?.message?.slice(0, 300));
+    const code = err?.error?.code ?? err?.error?.type ?? '';
+    throw Object.assign(new Error(`OpenAI ${res.status}`), { status: res.status, code, reason: `${res.status}${code ? '_' + code : ''}` }) as OpenAIError;
   }
   return res.json();
 }

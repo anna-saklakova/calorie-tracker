@@ -17,7 +17,10 @@ export interface RecognizeInput {
 
 export type RecognizeResult =
   | { status: 'ok'; items: ReviewItem[]; notes: string[] }
-  | { status: 'failed'; message: string };
+  | { status: 'failed'; message: string; code: string; seconds?: number };
+
+/** No answer from the server at all after this long (the server itself gives the model ~110 s). */
+export const CLIENT_TIMEOUT_MS = 130_000;
 
 /** The recognizer the app calls: sends the meal to /api/recognize, which talks to the model. */
 export type Recognizer = (input: RecognizeInput, signal: AbortSignal) => Promise<RecognizeResult>;
@@ -94,28 +97,61 @@ async function encodePhotos(photos: RecognizeInput['photos']) {
   throw new Error('too-big');
 }
 
+/**
+ * What to tell the user when the server answered with something other than our JSON: the hosting
+ * platform's own errors (timeout, body too large, crash) come as plain text or HTML.
+ */
+export function httpFailure(status: number): { message: string; code: string } {
+  if (status === 504 || status === 408) return { message: 'The server stopped waiting for the answer. Try one photo at a time, or add by hand', code: `http_${status}_timeout` };
+  if (status === 413) return { message: 'The photos are too large for the server. Remove one and try again', code: 'http_413_too_large' };
+  if (status === 401 || status === 403) return { message: 'Your session expired. Sign in again', code: `http_${status}` };
+  if (status === 404) return { message: 'Recognition isn’t available in this build', code: 'http_404' };
+  if (status >= 500) return { message: `The recognition service failed (error ${status}). Try again in a minute`, code: `http_${status}` };
+  return { message: `Unexpected answer from the server (${status}). Try again`, code: `http_${status}` };
+}
+
+/** `signal`, but also aborted after `ms` (older browsers without AbortSignal.any keep only the timeout). */
+function withTimeout(signal: AbortSignal, ms: number): AbortSignal {
+  const timeout = AbortSignal.timeout(ms);
+  return 'any' in AbortSignal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
 export const recognize: Recognizer = async (input, signal) => {
   const token = (await supabase?.auth.getSession())?.data.session?.access_token;
-  if (!token) return { status: 'failed', message: 'Your session expired. Sign in again' };
+  if (!token) return { status: 'failed', message: 'Your session expired. Sign in again', code: 'no_session' };
 
   let images: RecognizeRequest['images'];
   try {
     images = await encodePhotos(input.photos.slice(0, 6));
   } catch (e) {
-    return { status: 'failed', message: (e as Error).message === 'too-big' ? 'The photos are too large together. Remove one and try again' : (e as Error).message };
+    const err = e as Error;
+    if (err.message === 'too-big') return { status: 'failed', message: 'The photos are too large together. Remove one and try again', code: 'photos_too_large' };
+    return { status: 'failed', message: err.message || 'Couldn’t prepare the photos', code: `photo_${err.name || 'error'}` };
   }
   if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
   const body: RecognizeRequest = { images, text: input.text, voiceTranscript: '', library: libraryEntries(input.library) };
-  const res = await fetch('/api/recognize', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-    signal
-  });
+  const started = Date.now();
+  const seconds = () => Math.round((Date.now() - started) / 1000);
+  let res: Response;
+  try {
+    res = await fetch('/api/recognize', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+      signal: withTimeout(signal, CLIENT_TIMEOUT_MS)
+    });
+  } catch (e) {
+    if (signal.aborted) throw e; // the user cancelled
+    const name = (e as Error).name;
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      return { status: 'failed', message: 'No answer from the server in two minutes. Try one photo at a time, or add by hand', code: 'client_timeout', seconds: seconds() };
+    }
+    return { status: 'failed', message: 'Couldn’t reach the server. Check the connection and try again', code: `network_${name || 'error'}`, seconds: seconds() };
+  }
   const data = (await res.json().catch(() => null)) as RecognizeResponse | null;
-  if (!data) return { status: 'failed', message: 'Something went wrong on our side. Check your connection and try again.' };
-  if (data.status === 'failed') return data;
+  if (!data) return { status: 'failed', ...httpFailure(res.status), seconds: seconds() };
+  if (data.status === 'failed') return { ...data, code: data.code || `http_${res.status}`, seconds: seconds() };
 
   const items = data.meal.foods.map(toReviewItem);
   const notes: string[] = [];
