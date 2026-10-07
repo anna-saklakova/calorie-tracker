@@ -23,6 +23,8 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
   const t = macroTargets(s);
   const hasGoal = s.goal > 0;
   const [goalText, setGoalText] = useState(s.goal ? String(s.goal) : '');
+  const [minText, setMinText] = useState(s.min ? String(s.min) : '');
+  const minAboveGoal = hasGoal && (s.min ?? 0) > s.goal;
   // re-render every minute so "Synced · n min ago" stays current
   const [, tick] = useState(0);
   useEffect(() => {
@@ -60,6 +62,27 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
                 onChange={v => {
                   setGoalText(v);
                   updateSettings({ goal: Math.max(0, Math.round(+v || 0)) });
+                }}
+                className="num"
+                style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}
+              />
+              <span className="unit">kcal</span>
+            </div>
+          </div>
+
+          <div className="row row-sep">
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>Minimum</div>
+              <div className="row-sub" style={{ color: minAboveGoal ? 'var(--est)' : undefined }}>{minAboveGoal ? 'Higher than the goal' : 'Not below this on a full day · empty = none'}</div>
+            </div>
+            <div className="input-wrap">
+              <NumInput
+                value={minText}
+                ariaLabel="Minimum calories per day"
+                placeholder="—"
+                onChange={v => {
+                  setMinText(v);
+                  updateSettings({ min: Math.max(0, Math.round(+v || 0)) });
                 }}
                 className="num"
                 style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { switchBasis } from '../../components/Sheet';
-import { goalsOn, kcalStatus, proteinStatus } from '../nutrition';
+import { goalsOn, kcalStatus, proteinPace, proteinStatus } from '../nutrition';
 import { getData, setData, updateSettings } from '../store';
 import { emptyData } from '../types';
 import type { Product } from '../types';
@@ -66,5 +66,47 @@ describe('library basis switch', () => {
 
   it('leaves empty fields empty', () => {
     expect(switchBasis({ ...p, kcal: '' as unknown as number }, '100').kcal).toBe('');
+  });
+});
+
+describe('minimum calories', () => {
+  it('records the minimum in the goal history', () => {
+    setData(emptyData());
+    updateSettings({ min: 1600 }, '2026-10-10');
+    expect(goalsOn(getData().settings, '2026-10-09').min).toBe(0);
+    expect(goalsOn(getData().settings, '2026-10-10').min).toBe(1600);
+  });
+
+  it('marks a finished day under the minimum, never the current one', () => {
+    expect(kcalStatus(1200, 2000, 1600, true)).toBe('under');
+    expect(kcalStatus(1200, 2000, 1600, false)).toBe('within');
+    expect(kcalStatus(1700, 2000, 1600, true)).toBe('within');
+    expect(kcalStatus(1200, 0, 1600, true)).toBe('under');
+    expect(kcalStatus(0, 2000, 1600, true)).toBe('none');
+  });
+});
+
+describe('protein pace', () => {
+  const pace = (p: number, kcal: number) => proteinPace(p, 120, kcal, 2000).status;
+
+  it('judges by whether the missing grams still fit into the calories left', () => {
+    expect(pace(50, 1000)).toBe('on'); // 70 g in 1000 kcal: 1.17× the day's density
+    expect(pace(40, 1000)).toBe('close'); // 80 g in 1000 kcal: 1.33×
+    expect(pace(20, 1000)).toBe('behind'); // 100 g in 1000 kcal: 1.67×
+    expect(pace(0, 50)).toBe('on'); // a coffee first thing is not a problem yet
+    expect(pace(0, 400)).toBe('close'); // a protein-free breakfast is
+  });
+
+  it('is reached at 90 % whatever the calories, and judged by share once the calories are used up', () => {
+    expect(pace(110, 1900)).toBe('met');
+    expect(pace(100, 2100)).toBe('close');
+    expect(pace(60, 2100)).toBe('behind');
+  });
+
+  it('says nothing without a target or food, and reports the expected grams', () => {
+    expect(pace(0, 0)).toBe('none');
+    expect(proteinPace(30, 0, 800, 2000).status).toBe('none');
+    expect(proteinPace(30, 120, 1000, 0).status).toBe('none');
+    expect(proteinPace(50, 120, 1000, 2000)).toMatchObject({ expected: 60, left: 70, eatenShare: 0.5 });
   });
 });

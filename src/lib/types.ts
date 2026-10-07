@@ -53,6 +53,8 @@ export type MacroMode = 'pct' | 'g';
 export interface Goals {
   /** 0 = no goal */
   goal: number;
+  /** the least to eat on a full day; 0 or missing = none */
+  min?: number;
   macroMode: MacroMode;
   macroGoal: { p: number | ''; f: number | ''; c: number | '' };
 }
@@ -81,6 +83,7 @@ export interface Data {
 
 export const defaultSettings = (): Settings => ({
   goal: 2100,
+  min: 0,
   macroMode: 'pct',
   macroGoal: { p: 30, f: 30, c: 40 },
   units: 'g',
