@@ -1,10 +1,9 @@
 import { useRef } from 'react';
 import { ChevronLeft, ChevronRight, SettingsIcon } from '../components/icons';
-import { DateStrip, MacroCards } from '../components/ui';
-import type { MacroCardData } from '../components/ui';
+import { DateStrip } from '../components/ui';
 import { dayLabel, shift } from '../lib/dates';
-import { amountLabel, balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalStatus, MACRO_KEYS, macroPct, macroTargets } from '../lib/nutrition';
-import type { MacroKey } from '../lib/nutrition';
+import { amountLabel, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalStatus, macroTargets, PACE_LABEL, proteinPace } from '../lib/nutrition';
+import type { PaceStatus } from '../lib/nutrition';
 import type { Data, Item, Meal } from '../lib/types';
 
 interface Props {
@@ -52,6 +51,50 @@ function ItemRow({ item, units, onOpen, onLong }: { item: Item; units: Data['set
   );
 }
 
+const PACE_INK: Record<PaceStatus, string> = { none: 'var(--faint)', met: 'var(--accent)', on: 'var(--accent)', close: 'var(--est)', behind: 'var(--danger)' };
+
+/**
+ * Today's protein against its target, coloured by whether it keeps up with the calories eaten so far.
+ * The bar is the target; the fill is what's eaten; the tick is where the fill "should" be by now.
+ */
+function ProteinPanel({ protein, target, kcal, goal, dayDone }: { protein: number; target: number; kcal: number; goal: number; dayDone: boolean }) {
+  const pace = proteinPace(protein, target, kcal, goal);
+  const fill = target > 0 ? Math.min(1, protein / target) : 0;
+  const tick = pace.status === 'none' || pace.status === 'met' || goal <= 0 ? null : pace.eatenShare;
+  const note =
+    pace.status === 'none'
+      ? kcal > 0 ? 'No protein target set' : 'Nothing eaten yet'
+      : pace.status === 'met'
+        ? 'Protein for today is done'
+        : dayDone
+          ? `${Math.round(fill * 100)} % of the target`
+          : goal > 0
+            ? `${fmt(kcal)} of ${fmt(goal)} kcal eaten, so about ${pace.expected} g by now`
+            : `${Math.round(fill * 100)} % of the target`;
+  return (
+    <section className={`pace ${pace.status}`} aria-label={`Protein ${Math.round(protein)} of ${target} g${PACE_LABEL[pace.status] ? `, ${PACE_LABEL[pace.status].toLowerCase()}` : ''}`}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span className="pace-name">Protein</span>
+        {PACE_LABEL[pace.status] && <span className="pace-tag" style={{ color: PACE_INK[pace.status] }}>{PACE_LABEL[pace.status]}</span>}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 6 }}>
+        <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <span className="pace-val">{Math.round(protein)}</span>
+          <span className="pace-unit">{target > 0 ? `of ${target} g` : 'g'}</span>
+        </span>
+        {target > 0 && <span className="pace-left num">{pace.left > 0 ? `${Math.round(pace.left)} g to go` : 'done'}</span>}
+      </div>
+      {target > 0 && (
+        <div className="pace-track" role="progressbar" aria-valuemin={0} aria-valuemax={target} aria-valuenow={Math.round(Math.min(protein, target))}>
+          <div className="pace-fill" style={{ width: `${fill * 100}%`, background: PACE_INK[pace.status] }} />
+          {tick !== null && <div className="pace-tick" style={{ left: `${tick * 100}%` }} aria-hidden />}
+        </div>
+      )}
+      <div className="pace-note">{note}</div>
+    </section>
+  );
+}
+
 export function Today({ data, date, today, datePick, setDate, toggleDatePick, openSettings, openItem, deleteItem }: Props) {
   // the goals that applied on this day (goal changes don't rewrite the past)
   const s = goalsOn(data.settings, date);
@@ -59,27 +102,31 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
   const meals = day?.meals ?? [];
   const tot = dayTotals(day);
   const hasGoal = s.goal > 0;
+  const min = s.min ?? 0;
+  const dayDone = date < today;
   const progress = hasGoal ? Math.min(1, tot.kcal / s.goal) : 0;
   const targets = macroTargets(s);
-  const actual = macroPct(tot);
-  const cards = Object.fromEntries(
-    MACRO_KEYS.map(k => [
-      k,
-      {
-        pct: actual[k],
-        sub: targets.has ? `goal ${targets.pct[k]}%` : `${Math.round(tot[k])} g`,
-        tag: balanceTag(actual[k], targets.pct[k], actual.kcal > 0)
-      }
-    ])
-  ) as Record<MacroKey, MacroCardData>;
 
-  const goalLine = hasGoal
-    ? tot.kcal <= s.goal
-      ? `${fmt(s.goal - tot.kcal)} left of ${fmt(s.goal)}`
-      : `${fmt(tot.kcal - s.goal)} over ${fmt(s.goal)}`
+  // the big number is what's left to the goal; the total goes underneath
+  const left = s.goal - tot.kcal;
+  const hero = hasGoal ? fmt(Math.abs(left)) : fmt(tot.kcal);
+  const heroUnit = hasGoal ? (left >= 0 ? 'kcal left' : 'kcal over') : 'kcal';
+  const sub = hasGoal
+    ? `${fmt(tot.kcal)} eaten of ${fmt(s.goal)}`
     : meals.length
       ? `${meals.length} ${meals.length === 1 ? 'meal' : 'meals'} logged`
       : '';
+  const minLine =
+    min > 0
+      ? tot.kcal >= min
+        ? `Minimum ${fmt(min)} reached`
+        : dayDone
+          ? `Below the minimum of ${fmt(min)}`
+          : `${fmt(min - tot.kcal)} more to the minimum of ${fmt(min)}`
+      : '';
+  const ringStatus = kcalStatus(tot.kcal, s.goal, min, dayDone);
+  // where the minimum sits on the ring (the ring starts at the top, the svg is rotated −90°)
+  const minAngle = hasGoal && min > 0 && min < s.goal ? (2 * Math.PI * min) / s.goal : null;
 
   return (
     <div className="screen fade">
@@ -112,28 +159,32 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '26px 0 8px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <span className="hero">{fmt(tot.kcal)}</span>
-              <span className="hero-unit">kcal</span>
+              <span className="hero" style={{ color: hasGoal && left < 0 ? KCAL_COLOR[ringStatus] : undefined }}>{hero}</span>
+              <span className="hero-unit">{heroUnit}</span>
             </div>
-            <div className="secondary" style={{ marginTop: 8 }}>{goalLine}</div>
+            <div className="secondary" style={{ marginTop: 8 }}>{sub}</div>
+            {minLine && <div className="secondary" style={{ marginTop: 2, color: tot.kcal >= min ? 'var(--faint)' : dayDone ? 'var(--est)' : undefined }}>{minLine}</div>}
           </div>
           {hasGoal && (
-            <svg width="84" height="84" viewBox="0 0 84 84" style={{ transform: 'rotate(-90deg)' }} role="img" aria-label={`${Math.round(progress * 100)}% of daily goal`}>
+            <svg width="84" height="84" viewBox="0 0 84 84" style={{ transform: 'rotate(-90deg)', flex: 'none' }} role="img" aria-label={`${Math.round(progress * 100)}% of daily goal`}>
               <circle cx="42" cy="42" r="36" fill="none" stroke="var(--rose)" strokeWidth="7" />
               <circle
                 cx="42" cy="42" r="36" fill="none"
-                stroke={KCAL_COLOR[kcalStatus(tot.kcal, s.goal)]}
+                stroke={KCAL_COLOR[ringStatus]}
                 strokeWidth="7"
                 strokeLinecap="round"
                 strokeDasharray={`${(2 * Math.PI * 36 * progress).toFixed(1)} 999`}
                 style={{ transition: 'stroke-dasharray .6s' }}
               />
+              {minAngle !== null && (
+                <circle cx={(42 + 36 * Math.cos(minAngle)).toFixed(1)} cy={(42 + 36 * Math.sin(minAngle)).toFixed(1)} r="2.6" fill="var(--ink-2)" />
+              )}
             </svg>
           )}
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <MacroCards data={cards} showTags={targets.has} />
+          <ProteinPanel protein={tot.p} target={targets.g.p} kcal={tot.kcal} goal={s.goal} dayDone={dayDone} />
         </div>
 
         {!meals.length && (
