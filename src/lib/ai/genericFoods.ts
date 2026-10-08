@@ -153,8 +153,13 @@ const ROWS: Row[] = [
   ['feta', 'Feta', 264, 14, 21, 4.1, 0],
   ['cream_cheese', 'Cream cheese', 342, 6, 34, 4.1, 0],
   ['butter', 'Butter', 717, 0.9, 81, 0.1, 0],
-  ['cream', 'Cream (30%+)', 340, 2.8, 36, 2.7, 0],
-  ['sour_cream', 'Sour cream', 198, 2.4, 19, 4.6, 0],
+  // cream and sour cream by fat %: the user usually says which ("сливки 10%"), and it changes kcal threefold
+  ['cream_10', 'Cream 10% (coffee cream, half-and-half)', 119, 3.1, 10, 4.1, 0],
+  ['cream_20', 'Cream 20%', 204, 2.8, 20, 3.7, 0],
+  ['cream_30', 'Cream 30% (whipping cream)', 290, 2.4, 30, 3.2, 0],
+  ['cream', 'Cream, heavy (35%+)', 340, 2.8, 36, 2.7, 0],
+  ['sour_cream_10', 'Sour cream 10%', 119, 2.8, 10, 4, 0],
+  ['sour_cream', 'Sour cream 20%', 198, 2.4, 19, 4.6, 0],
   ['ice_cream', 'Ice cream, vanilla', 207, 3.5, 11, 24, 0.7],
   // Fats, nuts, seeds
   ['olive_oil', 'Olive oil', 884, 0, 100, 0, 0],

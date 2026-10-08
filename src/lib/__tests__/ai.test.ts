@@ -186,3 +186,10 @@ describe('re-run keeps what the user checked', () => {
     expect(keepUserNutrients(recognized, undefined)).toBe(recognized);
   });
 });
+
+describe('cream by fat', () => {
+  it('has cream at 10, 20, 30 and 35%+ so "сливки 10%" is not matched to heavy cream', () => {
+    const fat = (id: string) => GENERIC_FOODS.find(f => f.id === id)?.per100.fat_g;
+    expect(['cream_10', 'cream_20', 'cream_30', 'cream'].map(fat)).toEqual([10, 20, 30, 36]);
+  });
+});

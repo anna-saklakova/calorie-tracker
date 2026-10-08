@@ -21,7 +21,7 @@ export async function POST(req: Request): Promise<Response> {
   form.append('file', new Blob([audio], { type }), `note.${ext}`);
   form.append('language', config.transcribeLanguage());
   // the prompt is in the speaker's language and lists the kind of English words that come up in it
-  form.append('prompt', 'Заметка в дневник питания: что я съела и выпила и сколько (граммы, ложки, штуки, мл). Бывают английские слова и названия брендов: cookie, protein, skyr.');
+  form.append('prompt', 'Заметка в дневник питания: что я съела и выпила и сколько (граммы, ложки, штуки, мл). Жирность в процентах: сливки 10%, десятипроцентные сливки, молоко 1,5%. Бывают английские слова и названия брендов: cookie, protein, skyr.');
   try {
     const out = (await openai('audio/transcriptions', { form, signal: AbortSignal.timeout(55_000) })) as { text?: string };
     return json({ status: 'ok', text: (out.text ?? '').trim() });

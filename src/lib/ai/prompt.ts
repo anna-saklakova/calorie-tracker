@@ -34,6 +34,7 @@ Return ONLY data that matches the JSON schema. Rules:
    - Only the nutrition table matters for package_data; ignore recipes and serving suggestions on the package except for the scoop/serving-size conversion in rule 8.
 11. library_product_id: the id of the user's own product only if it is clearly the same product (same item/brand), copied exactly from the list. Otherwise null.
 12. generic_food_id: the id of the closest generic food in the list below, matching the food AND its preparation (cooked vs raw). If none fits, null. Never pick a random one.
+   A fat percentage the user states decides the match ("сливки 10%", "десятипроцентные сливки", "молоко 1,5%", "творог 5%"): pick the entry with that fat level, never a fattier or leaner one. If no entry has it, generic_food_id null and estimate_per_100g with that fat (fat g per 100 g ≈ the percentage). Without a stated percentage, take the most common kind for how it was used (cream in coffee → 10%).
 13. estimate_per_100g: always give your best estimate of the nutrients per 100 g of the food as eaten. It is used only when there is no label, library or generic match.
 14. Do not calculate meal totals or nutrients for the eaten amount. The app does the arithmetic.
 15. Names: short and plain, in the language of the user's note (English if there is no note). brand and product_name only if visible on a package or said by the user.
