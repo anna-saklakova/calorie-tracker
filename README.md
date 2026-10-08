@@ -32,6 +32,14 @@ Follows the AI module spec: `api/recognize.ts` (a Vercel function) sends all pho
 
 The OpenAI key lives only in the Vercel environment (`OPENAI_API_KEY`, Sensitive). Both functions require a signed-in Supabase session and a daily quota (`consume_ai_quota`: 50 recognitions / 100 voice notes per email, 500 / 1000 app-wide; counted per email so deleting and re-creating an account doesn't reset it). Setup: [docs/openai-setup.md](docs/openai-setup.md).
 
+The model gets up to 110 s (the function 120 s, the app waits 130 s); the Analyzing screen shows the seconds. Reasoning effort is `low` by default (`OPENAI_REASONING` env var to change): the model only reads the meal, the maths and the label checks are in code. When recognition fails, the Failed screen shows a short code under the message (`openai_timeout · 112 s`, `http_504_timeout`, `no_food`, `openai_400_invalid_json_schema`, …); the same code and the time taken are in Vercel → Logs, without any photo or note content.
+
+### Goals on Today and Week
+
+- Today shows the calories **left** to the goal as the big number, with "eaten of goal" underneath. Settings has a **Minimum** too: the least to eat on a full day. Today shows how far it is; on Week a finished day that stayed below it is a hollow bar, and the minimum is a second dashed line.
+- Today has one protein panel instead of three macro cards. It compares the protein eaten with the calories eaten: the missing grams must still fit into the calories left. Green when the rest of the day needs no more protein per kcal than the day's average (up to 1.2×), yellow up to 1.6× (protein-rich meals will catch up), red above that. The tick on the bar is where the protein "should" be by now. Reached and almost (from 85 %) follow the same rule as the weekly marks, so from 85 % the panel is never worse than yellow (`src/lib/nutrition.ts`, `proteinPace`).
+- Week keeps the three macro cards (averages) and marks each day's protein with a filled ✓ / ~ / ✕ circle.
+
 ## Supabase setup
 
 1. Create a project at supabase.com.
@@ -65,7 +73,7 @@ src/
     remote.ts          database calls (rows, save_records)
     merge.ts           per-record conflict rules (newer wins), unsaved-record tracking
     supabase.ts        client and auth (password, Google, reset)
-    nutrition.ts       totals, macro % of calories, goal tags (protein may go over, fat and carbs may stay under; On track ≤3 pts the wrong way, Acceptable ≤8, else Off balance)
+    nutrition.ts       totals, macro % of calories, goal tags (protein may go over, fat and carbs may stay under; On track ≤3 pts the wrong way, Acceptable ≤8, else Off balance), day status with the minimum, protein pace
     recognize.ts       calls /api/recognize, maps the result to Review rows
     ai/                shared with the server: schema, prompt, generic food DB, nutrient maths
     voice.ts           voice note recording → /api/transcribe

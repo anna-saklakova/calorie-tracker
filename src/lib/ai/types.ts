@@ -103,6 +103,13 @@ export interface FinalMeal {
   unmatched_package_image_ids: string[];
 }
 
+/** Why recognition failed: `message` for the user, `code` a short reason for reports and logs. */
+export interface RecognizeFailure {
+  status: 'failed';
+  message: string;
+  code: string;
+}
+
 /** What the model was given and answered, sent back so the app can keep it as a training example. */
 export interface RecognizeTrace {
   model: string;
@@ -116,6 +123,4 @@ export interface RecognizeTrace {
   model_output: IntermediateMeal;
 }
 
-export type RecognizeResponse =
-  | { status: 'ok'; meal: FinalMeal; trace?: RecognizeTrace }
-  | { status: 'failed'; message: string };
+export type RecognizeResponse = { status: 'ok'; meal: FinalMeal; trace?: RecognizeTrace; seconds?: number } | RecognizeFailure;

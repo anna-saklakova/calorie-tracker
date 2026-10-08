@@ -2,11 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus } from './components/icons';
 import { Sheet } from './components/Sheet';
 import { snackOptions, targetName } from './components/ui';
-import type { MacroSide } from './components/ui';
 import type { SheetState } from './components/Sheet';
 import { fullDayLabel, todayIso, weekStartOf } from './lib/dates';
 import { defaultMeal, mealLabels, r1, scaleItem } from './lib/nutrition';
-import type { MacroKey } from './lib/nutrition';
 import { loadPhoto } from './lib/images';
 import { recognize } from './lib/recognize';
 import type { Attempt } from './lib/recognize';
@@ -19,7 +17,7 @@ import { useVoiceNote } from './lib/voice';
 import { uid } from './lib/types';
 import type { Item, Meal, MealType, Photo, PhotoKind, Product, ReviewItem } from './lib/types';
 import { AddMeal } from './screens/AddMeal';
-import { Analyzing, emptyManual, Failed, Manual, Review } from './screens/Flow';
+import { Analyzing, emptyManual, Failed, failureDetail, Manual, Review } from './screens/Flow';
 import type { ManualForm } from './screens/Flow';
 import { Library } from './screens/Library';
 import { Settings } from './screens/Settings';
@@ -73,15 +71,13 @@ export default function App() {
   const [preparing, setPreparing] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewItem[]>([]);
   const [reviewNotes, setReviewNotes] = useState<string[]>([]);
-  const [failMsg, setFailMsg] = useState('');
+  const [fail, setFail] = useState({ message: '', detail: '' });
   const [man, setMan] = useState<ManualForm>(emptyManual);
   const [picking, setPicking] = useState(false);
   const [query, setQuery] = useState('');
   const [sheet, setSheet] = useState<SheetState | null>(null);
   const [weekStart, setWeekStart] = useState(weekStartOf(today));
   const [toast, setToast] = useState<Toast | null>(null);
-  // macro cards on Today: protein in grams, fat and carbs in %, until flipped (not kept when the app is closed)
-  const [macroSides, setMacroSides] = useState<Record<MacroKey, MacroSide>>({ p: 'g', f: 'pct', c: 'pct' });
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const abort = useRef<AbortController | null>(null);
   // the recognitions behind the Review screen (the first, then each re-run with a correction), kept as a training example on save
@@ -178,7 +174,7 @@ export default function App() {
       );
       if (ac.signal.aborted) return;
       if (res.status === 'failed') {
-        setFailMsg(res.message);
+        setFail({ message: res.message, detail: failureDetail(res.code, res.seconds) });
         go('failed');
       } else {
         attempts.current = correction === undefined ? [res.attempt] : [...attempts.current, res.attempt];
@@ -188,8 +184,10 @@ export default function App() {
         go('review');
       }
     } catch (e) {
-      if ((e as Error).name === 'AbortError') return;
-      setFailMsg('Something went wrong on our side. Check your connection and try again.');
+      if (ac.signal.aborted || (e as Error).name === 'AbortError') return;
+      // a bug in the app itself: say what it was instead of blaming the connection
+      const err = e as Error;
+      setFail({ message: 'The app hit an error while preparing the meal. Try again, or add by hand', detail: failureDetail(`app_${err.name || 'error'}: ${(err.message || '').slice(0, 80)}`) });
       go('failed');
     }
   };
@@ -294,8 +292,6 @@ export default function App() {
             setDatePick(false);
           }}
           toggleDatePick={() => setDatePick(p => !p)}
-          macroSides={macroSides}
-          flipMacro={k => setMacroSides(x => ({ ...x, [k]: x[k] === 'g' ? 'pct' : 'g' }))}
           openSettings={() => go('settings')}
           openItem={(m, it) =>
             setSheet({
@@ -355,7 +351,7 @@ export default function App() {
         />
       )}
 
-      {screen === 'failed' && <Failed message={failMsg} onRetry={() => go('add')} onManual={() => go('manual')} />}
+      {screen === 'failed' && <Failed message={fail.message} detail={fail.detail} onRetry={() => go('add')} onManual={() => go('manual')} />}
 
       {screen === 'manual' && (
         <Manual

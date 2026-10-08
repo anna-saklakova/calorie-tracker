@@ -197,3 +197,21 @@ button.row:active, .row-btn:active { background: var(--bg); }
 .state-title { font-size: 20px; font-weight: 600; }
 .state-body { font-size: 15px; color: var(--muted); margin-top: 8px; text-wrap: pretty; }
 .review-name:focus { border-bottom-color: var(--dash) !important; }
+
+/* protein pace panel (Today): coloured by whether protein keeps up with the calories eaten */
+.pace { border-radius: 20px; padding: 14px 16px 12px; background: var(--surface); }
+.pace.on, .pace.met { background: var(--sage); }
+.pace.close { background: var(--est-soft); }
+.pace.behind { background: var(--rose); }
+.pace-name { font-size: 13px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); }
+.pace.on .pace-name, .pace.met .pace-name { color: var(--accent-ink); }
+.pace.close .pace-name { color: var(--est-ink); }
+.pace.behind .pace-name { color: var(--rose-ink); }
+.pace-tag { font-size: 12px; font-weight: 700; white-space: nowrap; }
+.pace-val { font-size: 32px; font-weight: 600; letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums; }
+.pace-unit { font-size: 14px; color: var(--muted); font-weight: 500; }
+.pace-left { font-size: 14px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.pace-track { position: relative; height: 10px; border-radius: 999px; background: rgba(43, 34, 36, .09); margin-top: 12px; overflow: visible; }
+.pace-fill { height: 100%; border-radius: 999px; transition: width .5s; }
+.pace-tick { position: absolute; top: -4px; width: 2px; height: 18px; margin-left: -1px; border-radius: 1px; background: var(--ink); opacity: .55; }
+.pace-note { font-size: 12px; color: var(--muted); margin-top: 8px; font-variant-numeric: tabular-nums; }

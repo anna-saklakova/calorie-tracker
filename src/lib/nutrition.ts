@@ -117,14 +117,19 @@ export function goalsOn(s: Settings, date: string): Goals {
   return h.filter(x => x.from <= date).pop() ?? h[0];
 }
 
-export type KcalStatus = 'none' | 'within' | 'over' | 'way_over';
-/** Within the goal, up to 10 % over, or more than 10 % over. */
-export function kcalStatus(kcal: number, goal: number): KcalStatus {
-  if (goal <= 0 || kcal <= 0) return 'none';
+export type KcalStatus = 'none' | 'under' | 'within' | 'over' | 'way_over';
+/**
+ * Within the goal, up to 10 % over, or more than 10 % over. A finished day (`dayDone`) that stayed
+ * below the minimum is 'under'; a day still in progress is never judged as under.
+ */
+export function kcalStatus(kcal: number, goal: number, min = 0, dayDone = true): KcalStatus {
+  if (kcal <= 0) return 'none';
+  if (dayDone && min > 0 && kcal < min) return 'under';
+  if (goal <= 0) return 'none';
   if (kcal <= goal) return 'within';
   return kcal <= goal * 1.1 ? 'over' : 'way_over';
 }
-export const KCAL_COLOR: Record<KcalStatus, string> = { none: '#F3E6DF', within: 'var(--accent)', over: 'var(--est)', way_over: 'var(--danger)' };
+export const KCAL_COLOR: Record<KcalStatus, string> = { none: '#F3E6DF', under: 'var(--est)', within: 'var(--accent)', over: 'var(--est)', way_over: 'var(--danger)' };
 
 /**
  * Calories split for drawing: the part up to the goal is always green; only the part over it
@@ -169,3 +174,43 @@ export function mealLabels(meals: Meal[]): Record<string, string> {
   const snacks = meals.filter(m => m.type === 'Snack');
   return Object.fromEntries(meals.map(m => [m.id, m.type === 'Snack' && snacks.length > 1 ? `Snack ${snacks.indexOf(m) + 1}` : m.type]));
 }
+
+// ── Protein pace during the day ─────────────────────────────
+
+export type PaceStatus = 'none' | 'met' | 'on' | 'close' | 'behind';
+
+export interface ProteinPace {
+  status: PaceStatus;
+  /** grams still missing to the target */
+  left: number;
+  /** grams one "should" have by now, if protein came evenly with the calories eaten so far */
+  expected: number;
+  /** calories eaten as a share of the goal, 0–1 */
+  eatenShare: number;
+}
+
+/**
+ * Is today's protein keeping up with today's calories? The question is whether the missing grams
+ * still fit into the calories that are left: the rest of the day would need `left / kcalLeft` grams
+ * per kcal; a day at the target needs `target / goal`. Up to 1.2× that is on pace (green), up to 1.6×
+ * is doable with protein-rich meals (yellow), above that the target is unlikely (red).
+ * Reached and close follow proteinStatus (the target grams; from 85 % of them), so from 85 % the
+ * verdict is never worse than close, and the weekly marks agree with the panel.
+ */
+export function proteinPace(protein: number, target: number, kcal: number, goal: number): ProteinPace {
+  const left = Math.max(0, target - protein);
+  const eatenShare = goal > 0 ? Math.min(1, kcal / goal) : 0;
+  const expected = Math.round(target * eatenShare);
+  const pace = (status: PaceStatus): ProteinPace => ({ status, left, expected, eatenShare });
+  const st = proteinStatus(protein, target, kcal > 0);
+  if (st === 'none') return pace('none');
+  if (st === 'met') return pace('met');
+  if (goal <= 0) return pace('none');
+  const kcalLeft = goal - kcal;
+  if (kcalLeft <= 0) return pace(st === 'close' ? 'close' : 'behind');
+  const needed = left / kcalLeft / (target / goal);
+  const byPace: PaceStatus = needed <= 1.2 ? 'on' : needed <= 1.6 ? 'close' : 'behind';
+  return pace(st === 'close' && byPace === 'behind' ? 'close' : byPace);
+}
+
+export const PACE_LABEL: Record<PaceStatus, string> = { none: '', met: 'Goal reached', on: 'On pace', close: 'A bit behind', behind: 'Falling behind' };

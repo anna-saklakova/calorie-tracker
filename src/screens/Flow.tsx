@@ -11,10 +11,17 @@ import type { MealType, ReviewItem } from '../lib/types';
 /** `preparing` replaces the steps while a voice note or photo is still being finished before recognition. */
 export function Analyzing({ preparing, onCancel }: { preparing?: string | null; onCancel: () => void }) {
   const [step, setStep] = useState(0);
+  const [seconds, setSeconds] = useState(0);
   useEffect(() => {
     const iv = setInterval(() => setStep(s => (s + 1) % ANALYZE_STEPS.length), 900);
-    return () => clearInterval(iv);
+    const clock = setInterval(() => setSeconds(s => s + 1), 1000);
+    return () => {
+      clearInterval(iv);
+      clearInterval(clock);
+    };
   }, []);
+  // a dense label takes the model a while; say so instead of looking stuck
+  const slow = seconds >= 20;
   return (
     <div className="center-state" role="status" aria-live="polite">
       <div style={{ position: 'relative', width: 96, height: 96, display: 'grid', placeItems: 'center' }}>
@@ -22,8 +29,9 @@ export function Analyzing({ preparing, onCancel }: { preparing?: string | null; 
         <div style={{ position: 'absolute', inset: 14, borderRadius: '50%', border: '3px solid transparent', borderTopColor: 'var(--accent)', animation: 'ctSpin 1.1s linear infinite' }} />
       </div>
       <div className="state-title" style={{ marginTop: 32 }}>Looking at your meal</div>
-      <div className="state-body" style={{ minHeight: 44 }}>{preparing || ANALYZE_STEPS[step]}</div>
-      <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 28, textWrap: 'pretty' }}>{ANALYZE_CONTEXT}</div>
+      <div className="state-body" style={{ minHeight: 44 }}>{preparing || (slow ? 'Still reading. Labels with a lot of small print can take a minute or two' : ANALYZE_STEPS[step])}</div>
+      <div className="num" style={{ fontSize: 13, color: 'var(--faint)', marginTop: 8, minHeight: 18 }}>{seconds >= 5 ? `${seconds} s` : ''}</div>
+      <div style={{ fontSize: 13, color: 'var(--faint)', marginTop: 20, textWrap: 'pretty' }}>{ANALYZE_CONTEXT}</div>
       <button onClick={onCancel} style={{ marginTop: 40, height: 44, padding: '0 20px', borderRadius: 999, border: 'none', background: 'transparent', fontSize: 15, color: 'var(--muted)' }}>
         Cancel
       </button>
@@ -33,7 +41,10 @@ export function Analyzing({ preparing, onCancel }: { preparing?: string | null; 
 
 // ── Failed ──────────────────────────────────────────────────
 
-export function Failed({ message, onRetry, onManual }: { message: string; onRetry: () => void; onManual: () => void }) {
+/** The short reason and how long it took, e.g. "openai_timeout · 112 s", for reporting a problem. */
+export const failureDetail = (code?: string, seconds?: number) => [code, seconds !== undefined ? `${seconds} s` : ''].filter(Boolean).join(' · ');
+
+export function Failed({ message, detail, onRetry, onManual }: { message: string; detail?: string; onRetry: () => void; onManual: () => void }) {
   return (
     <div className="center-state" style={{ padding: '0 36px' }}>
       <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--surface-2)', display: 'grid', placeItems: 'center' }}>
@@ -41,6 +52,11 @@ export function Failed({ message, onRetry, onManual }: { message: string; onRetr
       </div>
       <div className="state-title" style={{ marginTop: 28 }}>Couldn't make out the food</div>
       <div className="state-body">{message}</div>
+      {detail && (
+        <div className="num" style={{ fontSize: 12, color: 'var(--faint)', marginTop: 12, fontFamily: 'ui-monospace, Menlo, monospace', userSelect: 'text', WebkitUserSelect: 'text' }} aria-label={`Error details: ${detail}`}>
+          {detail}
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', marginTop: 36 }}>
         <button className="btn-primary" onClick={onRetry}>Retake or add a note</button>
         <button className="btn-ghost" onClick={onManual}>Add by hand instead</button>

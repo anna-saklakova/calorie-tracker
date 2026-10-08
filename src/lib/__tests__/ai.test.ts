@@ -3,7 +3,7 @@ import { GENERIC_FOODS } from '../ai/genericFoods';
 import { buildMeal, packagePer100 } from '../ai/meal';
 import { mealSchema } from '../ai/prompt';
 import type { IntermediateFood, LibraryEntry, PackageData } from '../ai/types';
-import { libraryEntries, toReviewItem } from '../recognize';
+import { httpFailure, libraryEntries, toReviewItem } from '../recognize';
 
 const est = { kcal: 100, protein_g: 5, fat_g: 5, carbs_g: 10, fiber_g: null };
 const food = (over: Partial<IntermediateFood>): IntermediateFood => ({
@@ -89,10 +89,11 @@ describe('meal pipeline', () => {
 });
 
 describe('schema and mapping', () => {
-  it('only lets the model pick ids that exist', () => {
-    const s = mealSchema(['p1'], ['img_1']) as any;
+  it('only lets the model pick generic food and image ids that exist', () => {
+    const s = mealSchema(['img_1']) as any;
     const item = s.properties.foods.items.properties;
-    expect(item.library_product_id.enum).toEqual(['p1', null]);
+    expect(item.library_product_id).toEqual({ type: ['string', 'null'] });
+    expect(item.package_data.anyOf[1].properties.source_image_ids.items.enum).toEqual(['img_1']);
     expect(item.generic_food_id.enum).toHaveLength(GENERIC_FOODS.length + 1);
     expect(new Set(GENERIC_FOODS.map(f => f.id)).size).toBe(GENERIC_FOODS.length);
   });
@@ -145,5 +146,14 @@ describe('amount basis', () => {
     expect(meal.foods[0].amount_basis).toBe('2 scoops × 15 g (package)');
     expect(toReviewItem(meal.foods[0]).amountNote).toBe('2 scoops × 15 g (package)');
     expect(buildMeal({ foods: [food({ amount_basis: '' })], unmatched_package_image_ids: [], failure_reason: null }, []).foods[0].amount_basis).toBeNull();
+  });
+});
+
+describe('failure reporting', () => {
+  it('explains platform errors that come without our JSON', () => {
+    expect(httpFailure(504)).toMatchObject({ code: 'http_504_timeout' });
+    expect(httpFailure(413)).toMatchObject({ code: 'http_413_too_large' });
+    expect(httpFailure(500).message).toContain('500');
+    expect(httpFailure(401).message).toContain('Sign in');
   });
 });

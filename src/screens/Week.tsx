@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from '../components/icons';
 import { MacroCards } from '../components/ui';
 import type { MacroCardData } from '../components/ui';
 import { parse, shift, WD, weekLabel } from '../lib/dates';
-import { balanceTag, dayTotals, fmt, goalsOn, kcalParts, MACRO_KEYS, macroPct, macroTargets, proteinStatus, proteinTag } from '../lib/nutrition';
+import { balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalParts, kcalStatus, MACRO_KEYS, macroPct, macroTargets, proteinStatus, proteinTag } from '../lib/nutrition';
 import type { MacroKey, ProteinStatus } from '../lib/nutrition';
 import type { Data } from '../lib/types';
 
@@ -17,11 +17,21 @@ interface Props {
 
 const H = 120;
 
+/** glyph, background, description: a filled circle so the mark reads at a glance */
 const PROTEIN_MARK: Record<Exclude<ProteinStatus, 'none'>, [string, string, string]> = {
   met: ['✓', 'var(--accent)', 'protein reached'],
   close: ['~', 'var(--est)', 'protein almost reached'],
   short: ['✕', 'var(--danger)', 'protein short']
 };
+
+function ProteinMark({ status }: { status: Exclude<ProteinStatus, 'none'> }) {
+  const [glyph, bg] = PROTEIN_MARK[status];
+  return (
+    <span style={{ display: 'inline-grid', placeItems: 'center', width: 22, height: 22, borderRadius: '50%', background: bg, color: '#fff', fontSize: 13, fontWeight: 800, lineHeight: 1 }} aria-hidden>
+      {glyph}
+    </span>
+  );
+}
 
 export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, openDay }: Props) {
   const days = Array.from({ length: 7 }, (_, i) => shift(weekStart, i));
@@ -33,6 +43,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
   const lastDay = days[6] <= today ? days[6] : today;
   const s = goalsOn(data.settings, lastDay);
   const hasGoal = s.goal > 0;
+  const min = s.min ?? 0;
   // today isn't over yet, so the averages are of the finished days only
   const logged = totals.filter(x => x.d < today && x.t.kcal > 0);
   const todayPending = days.includes(today) && dayTotals(data.days[today]).kcal > 0;
@@ -40,6 +51,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
   const avgM = { p: avg('p'), f: avg('f'), c: avg('c') };
   const maxK = Math.max(s.goal || 0, ...totals.map(x => x.t.kcal), 1);
   const goalTop = hasGoal ? Math.round(H * (1 - Math.min(1, s.goal / maxK))) : 0;
+  const minTop = min > 0 ? Math.round(H * (1 - Math.min(1, min / maxK))) : 0;
   const isCurrent = weekStart >= currentWeekStart;
 
   const targets = macroTargets(s);
@@ -82,19 +94,19 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
         )}
       </div>
       <div className="scroll pad-tab">
-        <div style={{ padding: '26px 0 0' }}>
+        <div className="label" style={{ marginTop: 26 }}>Average per day</div>
+        <div style={{ padding: '10px 0 0' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <span className="hero">{logged.length ? fmt(avg('kcal')) : '—'}</span>
-            <span className="hero-unit">kcal / day</span>
+            <span className="hero-unit">kcal</span>
           </div>
           <div className="secondary" style={{ marginTop: 8 }}>
             {logged.length
-              ? `${logged.length} ${logged.length === 1 ? 'day' : 'days'} logged${hasGoal ? ` · goal ${fmt(s.goal)}` : ''}${todayPending ? ' · today counts once it’s over' : ''}`
+              ? `${logged.length} ${logged.length === 1 ? 'day' : 'days'} logged${hasGoal ? ` · goal ${fmt(s.goal)}` : ''}${min > 0 ? ` · min ${fmt(min)}` : ''}${todayPending ? ' · today counts once it’s over' : ''}`
               : todayPending ? 'Today counts once it’s over' : 'No meals logged this week'}
           </div>
         </div>
-        <div className="label" style={{ marginTop: 24 }}>Average per day</div>
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 14 }}>
           <MacroCards data={cards} showTags={targets.has} />
         </div>
 
@@ -105,6 +117,13 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
               <div style={{ position: 'absolute', right: 16, top: 60 + goalTop - 15, fontSize: 11, color: 'var(--faint)' }}>goal {fmt(s.goal)}</div>
             </>
           )}
+          {min > 0 && (
+            <>
+              <div style={{ position: 'absolute', left: 16, right: 16, top: 60 + minTop, borderTop: '1px dashed var(--dash)' }} />
+              {/* under its line, so it never meets the goal label, which sits above the goal line */}
+              <div style={{ position: 'absolute', right: 16, top: 60 + minTop + 2, fontSize: 11, color: 'var(--faint)' }}>min {fmt(min)}</div>
+            </>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, alignItems: 'end', height: 160 }}>
             {totals.map(x => {
               const has = x.d <= today && x.t.kcal > 0;
@@ -113,17 +132,25 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
               const parts = kcalParts(x.t.kcal, x.goals.goal);
               const color = !has ? '#F3E6DF' : x.goals.goal > 0 ? 'var(--accent)' : '#E8D3CA';
               const overH = has && parts.over ? Math.max(3, Math.round((h * parts.over) / x.t.kcal)) : 0;
+              // only a finished day can be under the minimum; today is still being filled. Shown as a hollow bar
+              const under = has && kcalStatus(x.t.kcal, x.goals.goal, x.goals.min ?? 0, x.d < today) === 'under';
               return (
                 <button
                   key={x.d}
                   disabled={x.d > today}
                   onClick={() => openDay(x.d)}
-                  aria-label={`${WD[parse(x.d).getDay()]}: ${has ? fmt(x.t.kcal) + ' kcal' : 'nothing logged'}`}
+                  aria-label={`${WD[parse(x.d).getDay()]}: ${has ? fmt(x.t.kcal) + ' kcal' + (under ? ', below the minimum' : '') : 'nothing logged'}`}
                   style={{ height: '100%', border: 'none', background: 'transparent', padding: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }}
                 >
                   <span className="num" style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6 }}>{has ? fmt(x.t.kcal) : ''}</span>
-                  <span style={{ width: '100%', height: h, borderRadius: 8, background: color, transition: 'height .4s', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                    {overH > 0 && <span style={{ height: overH, flex: 'none', background: parts.overColor }} />}
+                  <span
+                    style={
+                      under
+                        ? { width: '100%', height: h, borderRadius: 8, background: 'transparent', boxShadow: `inset 0 0 0 2px ${KCAL_COLOR.within}`, transition: 'height .4s' }
+                        : { width: '100%', height: h, borderRadius: 8, background: color, transition: 'height .4s', overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+                    }
+                  >
+                    {!under && overH > 0 && <span style={{ height: overH, flex: 'none', background: parts.overColor }} />}
                   </span>
                 </button>
               );
@@ -143,20 +170,24 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
                   // today gets its tick once the goal is reached; short or not isn't known before the day is over
                   const raw = x.d <= today ? proteinStatus(x.t.p, x.targets.g.p, x.t.kcal > 0) : 'none';
                   const st = x.d === today && raw !== 'met' ? 'none' : raw;
-                  const mark = st === 'none' ? null : PROTEIN_MARK[st];
                   return (
-                    <span key={x.d} aria-label={mark ? `${WD[parse(x.d).getDay()]}: ${mark[2]}, ${Math.round(x.t.p)} of ${x.targets.g.p} g` : undefined} style={{ textAlign: 'center', fontSize: 14, fontWeight: 700, lineHeight: '20px', color: mark ? mark[1] : 'var(--faint)' }}>
-                      {mark ? mark[0] : '·'}
+                    <span key={x.d} role={st === 'none' ? undefined : 'img'} aria-label={st === 'none' ? undefined : `${WD[parse(x.d).getDay()]}: ${PROTEIN_MARK[st][2]}, ${Math.round(x.t.p)} of ${x.targets.g.p} g`} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 22, color: 'var(--faint)', fontSize: 14 }}>
+                      {st === 'none' ? '·' : <ProteinMark status={st} />}
                     </span>
                   );
                 })}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 6, textAlign: 'center' }}>Protein · ✓ reached · ~ almost · ✕ short</div>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, fontSize: 11, color: 'var(--muted)', marginTop: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600 }}>Protein</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><ProteinMark status="met" /> reached</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><ProteinMark status="close" /> almost</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><ProteinMark status="short" /> short</span>
+              </div>
             </>
           )}
         </div>
         <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 12, padding: '0 4px' }}>
-          Tap a bar to open that day. Averages leave out today until it’s over.{hasGoal ? ' Green up to the goal; only the part over it is coloured: yellow up to 10 % over, red beyond.' : ''}
+          Tap a bar to open that day. Averages leave out today until it’s over.{hasGoal ? ' Green up to the goal; only the part over it is coloured: yellow up to 10 % over, red beyond.' : ''}{min > 0 ? ' A hollow bar stayed below the minimum.' : ''}
         </div>
       </div>
     </div>
