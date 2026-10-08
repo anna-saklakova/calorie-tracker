@@ -162,7 +162,8 @@ export async function POST(req: Request): Promise<Response> {
   } catch {
     return fail(502, 'Recognition gave an unreadable answer. Try again', 'openai_bad_json');
   }
-  const search = await searchNutrition(meal, library, started);
+  // the first answer is label → library → the model's estimate; a re-run (the user didn't like it) adds the web
+  const search = body.web === true ? await searchNutrition(meal, library, started) : { finds: new Map<number, WebFind>(), failed: false, output: null };
   const final = { ...buildMeal(meal, library, checked.length, search.finds), search_failed: search.failed || undefined };
   const total = Math.round((Date.now() - started) / 1000);
   console.log(`recognize ok in ${total} s (reading ${secs} s): ${final.foods.length} foods, ${images.length} photos, ${Math.round(imageBytes / 1024)} KB, tokens ${out.usage?.input_tokens ?? '?'}/${out.usage?.output_tokens ?? '?'}`);

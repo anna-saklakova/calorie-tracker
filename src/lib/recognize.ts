@@ -43,10 +43,9 @@ export const ANALYZE_STEPS = [
   'Reading the photos and your note…',
   'Checking labels for nutrition facts…',
   'Matching with your library…',
-  'Looking up nutrition online…',
   'Working out the amounts…'
 ];
-export const ANALYZE_CONTEXT = 'Uses your photos, your note and your saved products, then looks up the rest online. Anything it can’t find is estimated and marked.';
+export const ANALYZE_CONTEXT = 'Uses your photos, your note and your saved products. Anything it can’t read is estimated and marked; a re-run looks those up online.';
 
 /** Long side in px. Labels keep more detail for the small print. */
 const SIZES: [plate: number, label: number][] = [[1600, 2048], [1280, 1600], [1024, 1280]];
@@ -97,7 +96,7 @@ export function toReviewItem(f: FinalFood): ReviewItem {
     // label data is worth keeping in the library for next time
     save: f.nutrition_source === 'package',
     low: llm,
-    lowNote: llm ? 'No label, library match or web result · nutrients are an AI estimate' : undefined,
+    lowNote: llm ? 'No label or library match · AI estimate. Re-run to look it up online' : undefined,
     amountNote: f.amount_basis ?? undefined,
     amountSource: f.amount_source,
     nutritionSource: f.nutrition_source
@@ -183,7 +182,7 @@ export const recognize: Recognizer = async (input, signal) => {
   }
   if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
-  const body: RecognizeRequest = { images, text: input.text, voiceTranscript: '', library: libraryEntries(input.library), checked: input.previous?.map(checkedItem) };
+  const body: RecognizeRequest = { images, text: input.text, voiceTranscript: '', library: libraryEntries(input.library), checked: input.previous?.map(checkedItem), web: input.previous !== undefined };
   const at = new Date().toISOString();
   const started = Date.now();
   const seconds = () => Math.round((Date.now() - started) / 1000);
