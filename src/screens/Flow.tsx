@@ -206,18 +206,19 @@ export function Review({ subtitle, items, notes, onBack, onChange, onAmount, onR
               onChange={e => setNote(e.target.value)}
               rows={2}
               aria-label="Correction"
-              placeholder="e.g. the meat was 200 g, not 110"
+              placeholder="Optional: e.g. the meat was 200 g, not 110"
               style={{ marginTop: 6, width: '100%', border: 'none', background: 'transparent', resize: 'none', fontSize: 16, lineHeight: 1.45, display: 'block' }}
             />
-            <button className="btn-small-dark" style={{ marginTop: 8 }} disabled={!note.trim() && !incomplete} onClick={() => onReRun(note.trim())}>
-              {note.trim() || !incomplete ? 'Re-run with note' : 'Re-run to fill the gaps'}
+            {/* a re-run also looks up online the nutrients the first run only estimated */}
+            <button className="btn-small-dark" style={{ marginTop: 8 }} onClick={() => onReRun(note.trim())}>
+              {note.trim() ? 'Re-run with note' : incomplete ? 'Re-run to fill the gaps' : 'Re-run, look up online'}
             </button>
           </div>
         )}
       </div>
       <div className="footer">
         <button className="btn-primary" disabled={!items.length} onClick={onConfirm}>Confirm & save</button>
-        <button className="btn-ghost" onClick={() => setNoteOpen(o => !o)}>{noteOpen ? 'Hide note' : 'Add a note & re-run'}</button>
+        <button className="btn-ghost" onClick={() => setNoteOpen(o => !o)}>{noteOpen ? 'Hide' : 'Not right? Re-run'}</button>
       </div>
     </div>
   );

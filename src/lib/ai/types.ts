@@ -55,6 +55,8 @@ export interface RecognizeRequest {
   library: LibraryEntry[];
   /** a re-run from the Review screen: the list as the user checked and edited it */
   checked?: CheckedItem[];
+  /** look up online the nutrients of foods with no label or library match; only a re-run asks for it */
+  web?: boolean;
 }
 
 // ── Model output (intermediate JSON, §9 of the spec) ────────
