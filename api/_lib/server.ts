@@ -11,6 +11,11 @@ export const config = {
   /** how hard the model thinks before answering; 'low' is enough for reading a meal, 'medium' is slower */
   reasoning: () => env('OPENAI_REASONING') ?? 'low',
   transcribeModel: () => env('OPENAI_TRANSCRIBE_MODEL') ?? 'gpt-transcribe',
+  /** the web lookup of nutrients for foods without a label or library match; OPENAI_WEB_SEARCH=off turns it off */
+  webSearch: () => env('OPENAI_WEB_SEARCH') !== 'off',
+  searchModel: () => env('OPENAI_SEARCH_MODEL') ?? config.model(),
+  /** language of the voice notes (ISO 639-1); without it Russian speech with English product names can come back translated or cut */
+  transcribeLanguage: () => env('OPENAI_TRANSCRIBE_LANGUAGE') ?? 'ru',
   supabaseUrl: () => env('SUPABASE_URL', 'VITE_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'),
   supabaseAnonKey: () => env('SUPABASE_ANON_KEY', 'VITE_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')
 };

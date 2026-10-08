@@ -92,7 +92,7 @@ export const defaultSettings = (): Settings => ({
 
 export const emptyData = (): Data => ({ days: {}, library: [], settings: defaultSettings() });
 
-export type Source = 'label' | 'library' | 'estimated' | 'note';
+export type Source = 'label' | 'library' | 'web' | 'estimated' | 'note';
 
 /** An item proposed by recognition, shown on the Review screen. */
 export interface ReviewItem extends Item {
@@ -105,6 +105,12 @@ export interface ReviewItem extends Item {
   amountNote?: string;
   /** per-gram values so editing the amount rescales the macros */
   per: Macros;
+  /** the nutrient fields the user typed in; a re-run keeps them */
+  userSet?: (keyof Macros)[];
+  /** added by hand on the Review screen */
+  manual?: boolean;
+  /** the web page the nutrients came from */
+  sourceUrl?: string;
 }
 
 export type PhotoKind = 'plate' | 'label';

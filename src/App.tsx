@@ -4,15 +4,15 @@ import { Sheet } from './components/Sheet';
 import { snackOptions, targetName } from './components/ui';
 import type { SheetState } from './components/Sheet';
 import { fullDayLabel, todayIso, weekStartOf } from './lib/dates';
-import { defaultMeal, mealLabels, r1, scaleItem } from './lib/nutrition';
+import { defaultMeal, mealLabels, perGram, r1, scaleItem } from './lib/nutrition';
 import { loadPhoto } from './lib/images';
-import { recognize } from './lib/recognize';
+import { newReviewItem, recognize } from './lib/recognize';
 import type { Attempt } from './lib/recognize';
 import { saveExample } from './lib/dataset';
 import * as store from './lib/store';
 import { useData } from './lib/store';
 import { authAvailable, signOut, urlAuthError } from './lib/supabase';
-import { endRecovery, fetchLatest, flush, reload, useSync } from './lib/sync';
+import { endRecovery, fetchLatest, flush, reload, syncLabel, useSync } from './lib/sync';
 import { useVoiceNote } from './lib/voice';
 import { uid } from './lib/types';
 import type { Item, Meal, MealType, Photo, PhotoKind, Product, ReviewItem } from './lib/types';
@@ -71,6 +71,9 @@ export default function App() {
   const [preparing, setPreparing] = useState<string | null>(null);
   const [review, setReview] = useState<ReviewItem[]>([]);
   const [reviewNotes, setReviewNotes] = useState<string[]>([]);
+  // the correction being typed on Review and why a re-run failed: a failed re-run keeps the list, the edits and the note
+  const [reviewNote, setReviewNote] = useState('');
+  const [reviewError, setReviewError] = useState('');
   const [fail, setFail] = useState({ message: '', detail: '' });
   const [man, setMan] = useState<ManualForm>(emptyManual);
   const [picking, setPicking] = useState(false);
@@ -151,7 +154,10 @@ export default function App() {
     }
   };
 
+  /** set while a re-run from Review is in progress, so Cancel goes back to the list */
+  const rerun = useRef(false);
   const runRecognize = async (correction?: string) => {
+    rerun.current = correction !== undefined;
     abort.current?.abort();
     const ac = new AbortController();
     abort.current = ac;
@@ -159,10 +165,12 @@ export default function App() {
     try {
       if (correction === undefined) {
         // Recognize can be pressed before a voice note is transcribed or a photo is in: finish those first
-        setPreparing(voice.recording || voice.transcribing ? 'Turning your voice note into text…' : photosLoading ? 'Adding your photos…' : null);
-        await Promise.all([voice.finish(), photoQueue.current]);
+        setPreparing(voice.recording || voice.transcribing || voice.failed ? 'Turning your voice note into text…' : photosLoading ? 'Adding your photos…' : null);
+        const [heard] = await Promise.all([voice.finish(), photoQueue.current]);
         if (ac.signal.aborted) return;
         setPreparing(null);
+        // a voice note that couldn't be transcribed: recognizing without it would silently drop what was said
+        if (!heard.ok) return go('add');
         const d = draftRef.current;
         // nothing came of them (the error is already in a toast): back to the Add screen
         if (!d.text.trim() && !d.photos.length) return go('add');
@@ -174,6 +182,10 @@ export default function App() {
       );
       if (ac.signal.aborted) return;
       if (res.status === 'failed') {
+        if (correction !== undefined) {
+          setReviewError(`${res.message} (${failureDetail(res.code, res.seconds)})`);
+          return go('review');
+        }
         setFail({ message: res.message, detail: failureDetail(res.code, res.seconds) });
         go('failed');
       } else {
@@ -181,19 +193,26 @@ export default function App() {
         setReview(res.items);
         setReviewNotes(res.notes);
         if (correction) setDraft(d => ({ ...d, text: d.text + '\n' + correction }));
+        setReviewNote('');
+        setReviewError('');
         go('review');
       }
     } catch (e) {
       if (ac.signal.aborted || (e as Error).name === 'AbortError') return;
       // a bug in the app itself: say what it was instead of blaming the connection
       const err = e as Error;
-      setFail({ message: 'The app hit an error while preparing the meal. Try again, or add by hand', detail: failureDetail(`app_${err.name || 'error'}: ${(err.message || '').slice(0, 80)}`) });
+      const detail = failureDetail(`app_${err.name || 'error'}: ${(err.message || '').slice(0, 80)}`);
+      if (correction !== undefined) {
+        setReviewError(`The app hit an error (${detail})`);
+        return go('review');
+      }
+      setFail({ message: 'The app hit an error while preparing the meal. Try again, or add by hand', detail });
       go('failed');
     }
   };
   const cancelAnalyze = () => {
     abort.current?.abort();
-    go('add');
+    go(rerun.current ? 'review' : 'add');
   };
 
   const confirmSave = () => {
@@ -210,6 +229,8 @@ export default function App() {
     setDraft(d => ({ ...d, text: '', photos: [] }));
     setReview([]);
     setReviewNotes([]);
+    setReviewNote('');
+    setReviewError('');
     setDate(draft.date);
     go('today');
     showToast(`Saved to ${where}` + (toLib.length ? ` · ${toLib.length} added to library` : ''));
@@ -344,14 +365,28 @@ export default function App() {
           notes={reviewNotes}
           onBack={() => go('add')}
           onChange={(id, fn) => setReview(r => r.map(x => (x.id === id ? fn(x) : x)))}
-          onAmount={(id, v) => setReview(r => r.map(x => (x.id === id ? { ...scaleItem(x, v), amount: v === '' ? ('' as unknown as number) : +v } : x)))}
+          onAmount={(id, v) =>
+            setReview(r =>
+              r.map(x => {
+                if (x.id !== id) return x;
+                const amount = v === '' ? ('' as unknown as number) : +v;
+                // nutrients typed in before any amount are for that amount: they stay and become per gram
+                if (!(+x.amount > 0)) return { ...x, amount, per: perGram({ kcal: +x.kcal || 0, p: +x.p || 0, f: +x.f || 0, c: +x.c || 0, amount: +v || 0 }) };
+                return { ...scaleItem(x, v), amount };
+              })
+            )
+          }
           onRemove={id => setReview(r => r.filter(x => x.id !== id))}
+          onAdd={() => setReview(r => [...r, newReviewItem()])}
           onConfirm={confirmSave}
           onReRun={note => runRecognize(note)}
+          note={reviewNote}
+          setNote={setReviewNote}
+          error={reviewError}
         />
       )}
 
-      {screen === 'failed' && <Failed message={fail.message} detail={fail.detail} onRetry={() => go('add')} onManual={() => go('manual')} />}
+      {screen === 'failed' && <Failed message={fail.message} detail={fail.detail} onTryAgain={() => runRecognize()} onRetry={() => go('add')} onManual={() => go('manual')} />}
 
       {screen === 'manual' && (
         <Manual
@@ -509,6 +544,13 @@ export default function App() {
             });
           }}
         />
+      )}
+
+      {/* the last changes exist only in this tab until they reach the account: say so wherever the user is */}
+      {(sync.save === 'error' || sync.save === 'offline') && (
+        <div className="save-alert" role="alert">
+          {syncLabel(sync)}. Keep the app open until it says saved
+        </div>
       )}
 
       {toast && (

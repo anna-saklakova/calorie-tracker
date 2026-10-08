@@ -1,6 +1,5 @@
-import { GENERIC_FOODS } from './genericFoods.js';
 import { AMOUNT_SOURCES } from './types.js';
-import type { LibraryEntry } from './types.js';
+import type { CheckedItem, LibraryEntry } from './types.js';
 
 /** System prompt for the multimodal model (spec §6, §7, §16). */
 export const SYSTEM_PROMPT = `You analyse ONE meal for a calorie tracker. You get photos of the plate and/or of packaging and nutrition labels, plus an optional text note and an optional voice transcript from the user. Treat everything together as one meal.
@@ -8,6 +7,11 @@ export const SYSTEM_PROMPT = `You analyse ONE meal for a calorie tracker. You ge
 Return ONLY data that matches the JSON schema. Rules:
 1. Analyse all photos, the note and the transcript together as one meal.
 2. List only foods that were actually eaten. One entry = one food or ingredient (e.g. pasta, sauce, minced beef, broccoli — not "pasta dish").
+   Photos and words describe the SAME meal; they don't add up. Before listing, match each food the user mentions against what the photos show:
+   - The user names a food that a photo shows (same kind of food, even in other words: "протеиновое печенье" and a cookie or a cookie package in the photo) → ONE entry. The words only add details to it: amount, brand, variety, how it was cooked.
+   - A separate entry only for a food no photo shows ("и выпила сливок" next to a photo of a cookie), or when the user clearly says it is extra: "ещё", "плюс", "кроме этого", "не на фото", "another". A count above what is visible is the amount of the one entry ("два печенья" with one cookie in the photo → one entry, two cookies), not a second entry.
+   - Unsure whether a similar food in the words is the one in the photo → it is the same one; say so in amount_basis.
+   Nothing the user says they ate or drank may be left out: every food and drink named in the note or the transcript gets an entry, drinks and small additions included (cream, milk, juice, sugar, sauce, oil). If its amount isn't said and no photo shows it, use a typical portion with "visual_estimate" and say so in amount_basis.
 3. Packaging, cutlery, objects in the background and anything not eaten are NOT foods. But a photo of a package or label together with a note that it was eaten ("40 g of this", "two scoops", "one bar") means the user ate that product: list it as a food and attach the label's data to it. With a package photo and no note, assume one serving of the product was eaten and say so in amount_basis.
 4. A package or nutrition label belongs only to the food it is for. Put its data in package_data of that food only, with the image ids in source_image_ids. If you can't tell which food a package belongs to (and the note doesn't say), don't attach it; list its image id in unmatched_package_image_ids instead.
 5. Amount priority: if the user states an exact weight ("rice 175 g"), use it unchanged with amount_source "user_exact". Never replace it with your own visual estimate.
@@ -28,22 +32,37 @@ Return ONLY data that matches the JSON schema. Rules:
    - If the label is only per serving and the serving size in grams is visible, convert to per 100 g. If a value is not visible or not readable, use null. Never guess label values.
    - Only the nutrition table matters for package_data; ignore recipes and serving suggestions on the package except for the scoop/serving-size conversion in rule 8.
 11. library_product_id: the id of the user's own product only if it is clearly the same product (same item/brand), copied exactly from the list. Otherwise null.
-12. generic_food_id: the id of the closest generic food in the list below, matching the food AND its preparation (cooked vs raw). If none fits, null. Never pick a random one.
-13. estimate_per_100g: always give your best estimate of the nutrients per 100 g of the food as eaten. It is used only when there is no label, library or generic match.
+12. search_query: for every food without a readable label and without a library match, a short web search query that finds its nutrition per 100 g. Put in everything that changes the numbers: brand and product name if known, variety, the fat percentage the user stated ("десятипроцентные сливки" → "сливки 10% калорийность"; "молоко 1,5%"; "творог 5%"), raw / cooked / dry, how it was cooked. Branded products in the language of their package; dishes and plain foods in the user's language. null when a label or a library product covers the food.
+   A fat percentage the user states is part of the food: put it in the name too ("Сливки 10%"). Without one, take the usual kind for how it was used (cream in coffee → 10%).
+13. estimate_per_100g: always give your best estimate of the nutrients per 100 g of the food as eaten, for exactly that kind (the stated fat %, cooked or raw). It is used only when the label, the library and the web search give nothing.
 14. Do not calculate meal totals or nutrients for the eaten amount. The app does the arithmetic.
 15. Names: short and plain, in the language of the user's note (English if there is no note). brand and product_name only if visible on a package or said by the user.
 16. If no food can be identified at all (blurry, dark, not food), return an empty foods list and explain briefly in failure_reason. Otherwise failure_reason is null.
+17. Re-run with a checked list: the user already reviewed this meal and edited the result. Their list (numbered) is the meal now, and the last lines of the note are their correction.
+   - Return every row of the list, in its order, with checked_item = its number, changed only where the correction says so. Add foods only if the correction adds them (checked_item null); leave out a row only if the correction removes it.
+   - Foods seen in the photos or named in the note that are NOT on the list were removed by the user: never add them back.
+   - Keep the row's name and amount (amount_source "user_exact") unless the correction changes them.
+   - search_query null for a row whose four nutrients (kcal, protein, fat, carbs) are all given.
+   - Nutrients the user gave are for the row's whole amount; use them to choose matching per-100 g values. Rows with nutrients missing ("not given") were added by the user: find them as usual (label, library, search_query, estimate).
+   Without a checked list, checked_item is always null.
 
-amount_source values: ${AMOUNT_SOURCES.join(', ')}.
+amount_source values: ${AMOUNT_SOURCES.join(', ')}.`;
 
-Generic foods (id: name, per 100 g as listed):
-${GENERIC_FOODS.map(f => `${f.id}: ${f.name}`).join('\n')}`;
+const given = (n: number | null, unit = '') => (n === null ? '?' : `${n}${unit}`);
 
-export function userContent(text: string, voiceTranscript: string, library: LibraryEntry[], imageIds: { id: string; kind: string }[]) {
+export function userContent(text: string, voiceTranscript: string, library: LibraryEntry[], imageIds: { id: string; kind: string }[], checked: CheckedItem[] = []) {
   const lines: string[] = [];
   lines.push(imageIds.length ? `Photos: ${imageIds.map(i => `${i.id} (user tagged it as ${i.kind === 'label' ? 'package/label' : 'plate'})`).join(', ')}.` : 'No photos.');
   lines.push(text.trim() ? `User note: """${text.trim()}"""` : 'User note: none.');
   if (voiceTranscript.trim()) lines.push(`Voice transcript: """${voiceTranscript.trim()}"""`);
+  if (checked.length) {
+    const row = (c: CheckedItem, i: number) => {
+      const n = [c.kcal, c.protein_g, c.fat_g, c.carbs_g];
+      const nutrients = n.every(x => x === null) ? 'nutrients not given' : `${given(c.kcal)} kcal, protein ${given(c.protein_g, ' g')}, fat ${given(c.fat_g, ' g')}, carbs ${given(c.carbs_g, ' g')}`;
+      return `${i + 1}. ${c.name || 'unnamed'} · ${c.amount_g === null ? 'amount not given' : `${c.amount_g} g`} · ${nutrients}`;
+    };
+    lines.push(`Checked list (rule 17):\n${checked.map(row).join('\n')}`);
+  }
   lines.push(
     library.length
       ? `User's own products (id: name · kcal/protein/fat/carbs per 100 g):\n${library.map(p => `${p.id}: ${p.name} · ${p.per100.kcal}/${p.per100.protein_g}/${p.per100.fat_g}/${p.per100.carbs_g}`).join('\n')}`
@@ -62,8 +81,7 @@ const per100Schema = {
 };
 
 /**
- * Strict JSON Schema for Structured Outputs. Generic food and image ids are enums so the model can't
- * invent them. Library ids are a plain string (checked in code): an enum that changes with every saved
+ * Strict JSON Schema for Structured Outputs. Image ids are an enum so the model can't invent them. Library ids are a plain string (checked in code): an enum that changes with every saved
  * product would make a new schema per request (slower first answer) and is capped at 250 values.
  */
 export function mealSchema(imageIds: string[]) {
@@ -78,7 +96,7 @@ export function mealSchema(imageIds: string[]) {
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['name', 'brand', 'product_name', 'amount_g', 'amount_source', 'amount_basis', 'package_data', 'library_product_id', 'generic_food_id', 'estimate_per_100g'],
+          required: ['name', 'brand', 'product_name', 'amount_g', 'amount_source', 'amount_basis', 'package_data', 'library_product_id', 'search_query', 'estimate_per_100g', 'checked_item'],
           properties: {
             name: { type: 'string' },
             brand: { type: ['string', 'null'] },
@@ -109,8 +127,9 @@ export function mealSchema(imageIds: string[]) {
               ]
             },
             library_product_id: { type: ['string', 'null'] },
-            generic_food_id: { type: ['string', 'null'], enum: [...GENERIC_FOODS.map(f => f.id), null] },
-            estimate_per_100g: per100Schema
+            search_query: { type: ['string', 'null'] },
+            estimate_per_100g: per100Schema,
+            checked_item: { type: ['integer', 'null'] }
           }
         }
       },

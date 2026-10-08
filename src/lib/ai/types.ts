@@ -3,8 +3,9 @@
 export const AMOUNT_SOURCES = ['user_exact', 'user_estimate', 'visual_estimate'] as const;
 export type AmountSource = (typeof AMOUNT_SOURCES)[number];
 
-export const NUTRITION_SOURCES = ['package', 'product_db', 'generic_db', 'llm_estimate'] as const;
-export type NutritionSource = (typeof NUTRITION_SOURCES)[number];
+export const NUTRITION_SOURCES = ['package', 'product_db', 'web', 'llm_estimate'] as const;
+/** 'generic_db' only on items saved before the generic food list was dropped (0.10) */
+export type NutritionSource = (typeof NUTRITION_SOURCES)[number] | 'generic_db';
 
 /** Nutrients per 100 g. fiber is null when unknown. */
 export interface Per100 {
@@ -34,11 +35,26 @@ export interface LibraryEntry {
   per100: Per100;
 }
 
+/**
+ * One row of the Review screen as the user left it, sent with a re-run so their edits are kept.
+ * Nutrients are for the whole amount; null where the user left the field empty (a food added by hand).
+ */
+export interface CheckedItem {
+  name: string;
+  amount_g: number | null;
+  kcal: number | null;
+  protein_g: number | null;
+  fat_g: number | null;
+  carbs_g: number | null;
+}
+
 export interface RecognizeRequest {
   images: MealImage[];
   text: string;
   voiceTranscript: string;
   library: LibraryEntry[];
+  /** a re-run from the Review screen: the list as the user checked and edited it */
+  checked?: CheckedItem[];
 }
 
 // ── Model output (intermediate JSON, §9 of the spec) ────────
@@ -66,9 +82,12 @@ export interface IntermediateFood {
   amount_basis: string | null;
   package_data: PackageData | null;
   library_product_id: string | null;
-  generic_food_id: string | null;
+  /** what to look up on the web for the nutrients; null when a label or a library product covers the food */
+  search_query: string | null;
   /** model's own per-100 g guess; used only when nothing better exists (llm_estimate) */
   estimate_per_100g: Per100;
+  /** on a re-run: the number (1-based) of the checked-list row this food is, null for a new food */
+  checked_item: number | null;
 }
 
 export interface IntermediateMeal {
@@ -91,16 +110,30 @@ export interface FinalFood {
   nutrition: Nutrients;
   nutrition_source: NutritionSource;
   per100: Per100;
-  /** library product or generic food the nutrients came from */
+  /** library product the nutrients came from */
   matched_name: string | null;
+  /** web page the nutrients came from (nutrition_source 'web') */
+  source_name: string | null;
+  source_url: string | null;
   /** set when the label's energy value didn't match its macros: 'kj' = it was kJ and got converted, 'macros' = replaced by the energy the macros imply */
   energy_fix: 'kj' | 'macros' | null;
+  /** on a re-run: index (0-based) of the checked-list row this food is, null for a new one */
+  checked_index: number | null;
 }
 
 export interface FinalMeal {
   foods: FinalFood[];
   total: Nutrients;
   unmatched_package_image_ids: string[];
+  /** the web lookup was needed but didn't answer: those foods fell back to the model's estimate */
+  search_failed?: boolean;
+}
+
+/** Nutrients found on the web for one food (the index into the model's foods list). */
+export interface WebFind {
+  per100: Per100;
+  source_name: string;
+  source_url: string;
 }
 
 /** Why recognition failed: `message` for the user, `code` a short reason for reports and logs. */
@@ -121,6 +154,8 @@ export interface RecognizeTrace {
   input_text: string;
   /** the model's own JSON answer, before nutrition sources were picked and the arithmetic done in code */
   model_output: IntermediateMeal;
+  /** what the web lookup answered (null when it wasn't needed or failed) */
+  search_output?: unknown;
 }
 
 export type RecognizeResponse = { status: 'ok'; meal: FinalMeal; trace?: RecognizeTrace; seconds?: number } | RecognizeFailure;

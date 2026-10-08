@@ -17,6 +17,68 @@ interface Props {
 
 const H = 120;
 
+/** A finished week's main numbers, for comparing with the week before. Today is left out until it's over. */
+export function weekSummary(data: Data, weekStart: string, today: string) {
+  const days = Array.from({ length: 7 }, (_, i) => shift(weekStart, i))
+    .filter(d => d < today)
+    .map(d => {
+      const goals = goalsOn(data.settings, d);
+      return { t: dayTotals(data.days[d]), goals, protein: macroTargets(goals).g.p };
+    })
+    .filter(x => x.t.kcal > 0);
+  const n = days.length;
+  const withGoal = days.filter(x => x.goals.goal > 0);
+  const withProtein = days.filter(x => x.protein > 0);
+  return {
+    days: n,
+    kcal: n ? days.reduce((a, x) => a + x.t.kcal, 0) / n : 0,
+    protein: n ? days.reduce((a, x) => a + x.t.p, 0) / n : 0,
+    /** days that ended within the calorie goal (and not under the minimum), of the days that had a goal */
+    onGoal: withGoal.filter(x => kcalStatus(x.t.kcal, x.goals.goal, x.goals.min ?? 0) === 'within').length,
+    goalDays: withGoal.length,
+    /** days the protein target was reached, of the days that had one */
+    proteinMet: withProtein.filter(x => proteinStatus(x.t.p, x.protein, true) === 'met').length,
+    proteinDays: withProtein.length
+  };
+}
+type Summary = ReturnType<typeof weekSummary>;
+
+const GOOD = 'var(--accent-ink)';
+const BAD = 'var(--danger)';
+
+/** This week next to the week before: average calories and protein, days on the calorie goal, days protein was reached. */
+function Compare({ now, prev, goal, isCurrent }: { now: Summary; prev: Summary; goal: number; isCurrent: boolean }) {
+  const arrow = (d: number) => (d > 0 ? '↑' : d < 0 ? '↓' : '');
+  // calories: better is closer to the goal (without a goal, no verdict); everything else: more is better
+  const kcalTone = goal > 0 ? (Math.abs(now.kcal - goal) < Math.abs(prev.kcal - goal) ? GOOD : Math.abs(now.kcal - goal) > Math.abs(prev.kcal - goal) ? BAD : undefined) : undefined;
+  const tone = (d: number) => (d > 0 ? GOOD : d < 0 ? BAD : undefined);
+  const rows: { label: string; value: string; change: string; color?: string; before: string }[] = [
+    { label: 'Average', value: `${fmt(now.kcal)} kcal`, change: `${arrow(Math.round(now.kcal - prev.kcal))} ${fmt(Math.abs(now.kcal - prev.kcal))}`, color: kcalTone, before: fmt(prev.kcal) },
+    { label: 'Protein', value: `${Math.round(now.protein)} g`, change: `${arrow(Math.round(now.protein - prev.protein))} ${Math.abs(Math.round(now.protein - prev.protein))} g`, color: tone(Math.round(now.protein - prev.protein)), before: `${Math.round(prev.protein)} g` }
+  ];
+  if (now.goalDays && prev.goalDays) rows.push({ label: 'On calorie goal', value: `${now.onGoal} of ${now.goalDays} days`, change: '', color: tone(now.onGoal / now.goalDays - prev.onGoal / prev.goalDays), before: `${prev.onGoal} of ${prev.goalDays}` });
+  if (now.proteinDays && prev.proteinDays) rows.push({ label: 'Protein reached', value: `${now.proteinMet} of ${now.proteinDays} days`, change: '', color: tone(now.proteinMet / now.proteinDays - prev.proteinMet / prev.proteinDays), before: `${prev.proteinMet} of ${prev.proteinDays}` });
+  return (
+    <section style={{ marginTop: 28 }}>
+      <div className="label" style={{ padding: '0 4px 10px' }}>{isCurrent ? 'Compared with last week' : 'Compared with the week before'}</div>
+      <div className="card">
+        {rows.map(r => (
+          <div key={r.label} className="row" style={{ cursor: 'default' }}>
+            <div style={{ minWidth: 0 }}>
+              <div className="row-name">{r.label}</div>
+              <div className="row-sub">before {r.before}</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <div className="num" style={{ fontSize: 16, fontWeight: 600, color: r.color }}>{r.value}</div>
+              {r.change.trim() && <div className="num" style={{ fontSize: 12, color: r.color ?? 'var(--muted)', marginTop: 2 }}>{r.change.trim()}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /** glyph, background, description: a filled circle so the mark reads at a glance */
 const PROTEIN_MARK: Record<Exclude<ProteinStatus, 'none'>, [string, string, string]> = {
   met: ['✓', 'var(--accent)', 'protein reached'],
@@ -74,6 +136,8 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
     })
   ) as Record<MacroKey, MacroCardData>;
   const showProtein = totals.some(x => x.targets.g.p > 0);
+  const now = weekSummary(data, weekStart, today);
+  const prev = weekSummary(data, shift(weekStart, -7), today);
 
   return (
     <div className="screen fade">
@@ -101,9 +165,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
             <span className="hero-unit">kcal</span>
           </div>
           <div className="secondary" style={{ marginTop: 8 }}>
-            {logged.length
-              ? `${logged.length} ${logged.length === 1 ? 'day' : 'days'} logged${hasGoal ? ` · goal ${fmt(s.goal)}` : ''}${min > 0 ? ` · min ${fmt(min)}` : ''}${todayPending ? ' · today counts once it’s over' : ''}`
-              : todayPending ? 'Today counts once it’s over' : 'No meals logged this week'}
+            {logged.length ? `${logged.length} ${logged.length === 1 ? 'day' : 'days'} logged` : todayPending ? 'Today counts once it’s over' : 'No meals logged this week'}
           </div>
         </div>
         <div style={{ marginTop: 14 }}>
@@ -165,7 +227,8 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
           </div>
           {showProtein && (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, marginTop: 10, borderTop: '1px solid var(--line-soft)', paddingTop: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginTop: 10, borderTop: '1px solid var(--line-soft)', paddingTop: 8 }}>Protein</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, marginTop: 6 }}>
                 {totals.map(x => {
                   // today gets its tick once the goal is reached; short or not isn't known before the day is over
                   const raw = x.d <= today ? proteinStatus(x.t.p, x.targets.g.p, x.t.kcal > 0) : 'none';
@@ -177,18 +240,10 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
                   );
                 })}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, fontSize: 11, color: 'var(--muted)', marginTop: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 600 }}>Protein</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><ProteinMark status="met" /> reached</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><ProteinMark status="close" /> almost</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><ProteinMark status="short" /> short</span>
-              </div>
             </>
           )}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 12, padding: '0 4px' }}>
-          Tap a bar to open that day. Averages leave out today until it’s over.{hasGoal ? ' Green up to the goal; only the part over it is coloured: yellow up to 10 % over, red beyond.' : ''}{min > 0 ? ' A hollow bar stayed below the minimum.' : ''}
-        </div>
+        {now.days > 0 && prev.days > 0 && <Compare now={now} prev={prev} goal={s.goal} isCurrent={isCurrent} />}
       </div>
     </div>
   );
