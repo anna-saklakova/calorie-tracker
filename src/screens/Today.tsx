@@ -57,20 +57,12 @@ const PACE_INK: Record<PaceStatus, string> = { none: 'var(--faint)', met: 'var(-
  * Today's protein against its target, coloured by whether it keeps up with the calories eaten so far.
  * The bar is the target; the fill is what's eaten; the tick is where the fill "should" be by now.
  */
-function ProteinPanel({ protein, target, kcal, goal, dayDone }: { protein: number; target: number; kcal: number; goal: number; dayDone: boolean }) {
+function ProteinPanel({ protein, target, kcal, goal }: { protein: number; target: number; kcal: number; goal: number }) {
   const pace = proteinPace(protein, target, kcal, goal);
   const fill = target > 0 ? Math.min(1, protein / target) : 0;
   const tick = pace.status === 'none' || pace.status === 'met' || goal <= 0 ? null : pace.eatenShare;
-  const note =
-    pace.status === 'none'
-      ? kcal > 0 ? 'No protein target set' : 'Nothing eaten yet'
-      : pace.status === 'met'
-        ? 'Protein for today is done'
-        : dayDone
-          ? `${Math.round(fill * 100)} % of the target`
-          : goal > 0
-            ? `${fmt(kcal)} of ${fmt(goal)} kcal eaten, so about ${pace.expected} g by now`
-            : `${Math.round(fill * 100)} % of the target`;
+  // the numbers and the bar say it all; a note only when there is nothing to measure against
+  const note = target > 0 ? '' : 'No protein target set';
   return (
     <section className={`pace ${pace.status}`} aria-label={`Protein ${Math.round(protein)} of ${target} g${PACE_LABEL[pace.status] ? `, ${PACE_LABEL[pace.status].toLowerCase()}` : ''}`}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -90,7 +82,7 @@ function ProteinPanel({ protein, target, kcal, goal, dayDone }: { protein: numbe
           {tick !== null && <div className="pace-tick" style={{ left: `${tick * 100}%` }} aria-hidden />}
         </div>
       )}
-      <div className="pace-note">{note}</div>
+      {note && <div className="pace-note">{note}</div>}
     </section>
   );
 }
@@ -102,8 +94,6 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
   const meals = day?.meals ?? [];
   const tot = dayTotals(day);
   const hasGoal = s.goal > 0;
-  const min = s.min ?? 0;
-  const dayDone = date < today;
   // over the goal the ring stands for everything eaten: green up to the goal, the rest in the over colour
   const parts = kcalParts(tot.kcal, s.goal);
   const ringScale = Math.max(tot.kcal, s.goal, 1);
@@ -118,20 +108,10 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
   const hero = hasGoal ? fmt(Math.abs(left)) : fmt(tot.kcal);
   const heroUnit = hasGoal ? (left >= 0 ? 'kcal left' : 'kcal over') : 'kcal';
   const sub = hasGoal
-    ? `${fmt(tot.kcal)} eaten of ${fmt(s.goal)}`
+    ? `${left >= 0 ? 'of' : 'goal'} ${fmt(s.goal)}`
     : meals.length
       ? `${meals.length} ${meals.length === 1 ? 'meal' : 'meals'} logged`
       : '';
-  const minLine =
-    min > 0
-      ? tot.kcal >= min
-        ? `Minimum ${fmt(min)} reached`
-        : dayDone
-          ? `Below the minimum of ${fmt(min)}`
-          : `${fmt(min - tot.kcal)} more to the minimum of ${fmt(min)}`
-      : '';
-  // where the minimum sits on the ring (the ring starts at the top, the svg is rotated −90°)
-  const minAngle = hasGoal && min > 0 && min < s.goal ? (2 * Math.PI * min) / s.goal : null;
 
   return (
     <div className="screen fade">
@@ -168,7 +148,6 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
               <span className="hero-unit">{heroUnit}</span>
             </div>
             <div className="secondary" style={{ marginTop: 8 }}>{sub}</div>
-            {minLine && <div className="secondary" style={{ marginTop: 2, color: tot.kcal >= min ? 'var(--faint)' : dayDone ? 'var(--est)' : undefined }}>{minLine}</div>}
           </div>
           {hasGoal && (
             <svg width="84" height="84" viewBox="0 0 84 84" style={{ transform: 'rotate(-90deg)', flex: 'none' }} role="img" aria-label={`${Math.round((tot.kcal / s.goal) * 100)}% of daily goal`}>
@@ -192,15 +171,12 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
                   style={{ transition: 'stroke-dasharray .6s, stroke-dashoffset .6s' }}
                 />
               )}
-              {minAngle !== null && parts.over === 0 && (
-                <circle cx={(42 + 36 * Math.cos(minAngle)).toFixed(1)} cy={(42 + 36 * Math.sin(minAngle)).toFixed(1)} r="2.6" fill="var(--ink-2)" />
-              )}
             </svg>
           )}
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <ProteinPanel protein={tot.p} target={targets.g.p} kcal={tot.kcal} goal={s.goal} dayDone={dayDone} />
+          <ProteinPanel protein={tot.p} target={targets.g.p} kcal={tot.kcal} goal={s.goal} />
         </div>
 
         {!meals.length && (
