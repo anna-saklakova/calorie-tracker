@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
-import { buildMeal } from '../src/lib/ai/meal.js';
+import { buildMeal, coveredWithoutSearch } from '../src/lib/ai/meal.js';
 import { mealSchema, SYSTEM_PROMPT, userContent } from '../src/lib/ai/prompt.js';
-import type { CheckedItem, IntermediateMeal, RecognizeRequest, RecognizeTrace } from '../src/lib/ai/types.js';
+import { SEARCH_PROMPT, searchedUrls, searchInput, searchSchema, webFinds } from '../src/lib/ai/search.js';
+import type { SearchAnswer } from '../src/lib/ai/search.js';
+import type { CheckedItem, IntermediateMeal, LibraryEntry, RecognizeRequest, RecognizeTrace, WebFind } from '../src/lib/ai/types.js';
 import { authorize, config, fail, json, openai, tooBig } from './_lib/server.js';
 import type { OpenAIError } from './_lib/server.js';
 
@@ -17,6 +19,52 @@ const MAX_IMAGES = 6;
 const MAX_LIBRARY = 250;
 /** The model gets this long; vercel.json gives the function a little more (maxDuration). */
 const MODEL_TIMEOUT_MS = 110_000;
+/** The web lookup gets at most this long, and only what is left before the function's own limit. */
+const SEARCH_TIMEOUT_MS = 45_000;
+const FUNCTION_BUDGET_MS = 114_000;
+/** Below this there's no point starting a lookup: the model's estimate stays. */
+const SEARCH_MIN_MS = 12_000;
+
+/**
+ * Looks up on the web the nutrients of the foods that have no label and no library match. Never throws:
+ * a lookup that fails or runs out of time leaves those foods on the model's estimate.
+ */
+async function searchNutrition(meal: IntermediateMeal, library: LibraryEntry[], started: number) {
+  const byId = new Map(library.map(p => [p.id, p]));
+  const foods = meal.foods ?? [];
+  const todo = foods.map((f, i) => (f?.search_query?.trim() && !coveredWithoutSearch(f, byId) ? i : -1)).filter(i => i >= 0);
+  const none = { finds: new Map<number, WebFind>(), failed: false, output: null as unknown };
+  if (!todo.length || !config.webSearch()) return none;
+  const budget = Math.min(SEARCH_TIMEOUT_MS, FUNCTION_BUDGET_MS - (Date.now() - started));
+  if (budget < SEARCH_MIN_MS) {
+    console.error(`recognize: no time left for the web lookup (${todo.length} foods)`);
+    return { ...none, failed: true };
+  }
+  const t0 = Date.now();
+  try {
+    const out = (await openai('responses', {
+      json: {
+        model: config.searchModel(),
+        instructions: SEARCH_PROMPT,
+        input: [{ role: 'user', content: [{ type: 'input_text', text: searchInput(foods, todo) }] }],
+        tools: [{ type: 'web_search' }],
+        include: ['web_search_call.action.sources'],
+        reasoning: { effort: config.reasoning() },
+        text: { format: { type: 'json_schema', name: 'nutrition', strict: true, schema: searchSchema } },
+        store: false
+      },
+      signal: AbortSignal.timeout(budget)
+    })) as { status?: string; output?: { type: string; content?: { type: string; text?: string }[] }[] };
+    const raw = (out.output ?? []).flatMap(o => (o.type === 'message' ? o.content ?? [] : [])).find(p => p.type === 'output_text')?.text;
+    const answer = raw ? (JSON.parse(raw) as SearchAnswer) : null;
+    const finds = webFinds(answer, searchedUrls(out.output), foods.length);
+    console.log(`recognize: web lookup in ${Math.round((Date.now() - t0) / 1000)} s, ${finds.size} of ${todo.length} foods found`);
+    return { finds, failed: !answer, output: answer };
+  } catch (e) {
+    console.error(`recognize: web lookup failed after ${Math.round((Date.now() - t0) / 1000)} s: ${(e as OpenAIError).reason ?? (e as Error).message}`);
+    return { ...none, failed: true };
+  }
+}
 
 export async function POST(req: Request): Promise<Response> {
   if (tooBig(req)) return fail(413, 'The photos are too large. Try fewer photos', 'request_too_large');
@@ -114,8 +162,10 @@ export async function POST(req: Request): Promise<Response> {
   } catch {
     return fail(502, 'Recognition gave an unreadable answer. Try again', 'openai_bad_json');
   }
-  const final = buildMeal(meal, library, checked.length);
-  console.log(`recognize ok in ${secs} s: ${final.foods.length} foods, ${images.length} photos, ${Math.round(imageBytes / 1024)} KB, tokens ${out.usage?.input_tokens ?? '?'}/${out.usage?.output_tokens ?? '?'}`);
+  const search = await searchNutrition(meal, library, started);
+  const final = { ...buildMeal(meal, library, checked.length, search.finds), search_failed: search.failed || undefined };
+  const total = Math.round((Date.now() - started) / 1000);
+  console.log(`recognize ok in ${total} s (reading ${secs} s): ${final.foods.length} foods, ${images.length} photos, ${Math.round(imageBytes / 1024)} KB, tokens ${out.usage?.input_tokens ?? '?'}/${out.usage?.output_tokens ?? '?'}`);
   if (!final.foods.length) {
     return json({
       status: 'failed',
@@ -129,7 +179,8 @@ export async function POST(req: Request): Promise<Response> {
     prompt_sha256: createHash('sha256').update(SYSTEM_PROMPT).digest('hex'),
     commit: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
     input_text: inputText,
-    model_output: meal
+    model_output: meal,
+    search_output: search.output
   };
-  return json({ status: 'ok', meal: final, trace, seconds: secs });
+  return json({ status: 'ok', meal: final, trace, seconds: total });
 }

@@ -72,6 +72,7 @@ const HINT_STYLE: Record<ReviewItem['src'], [string, string]> = {
   estimated: ['var(--est-soft)', 'var(--est-ink)'],
   label: ['var(--rose)', 'var(--rose-ink)'],
   library: ['var(--surface-2)', '#5E584F'],
+  web: ['var(--sage)', 'var(--accent-ink)'],
   note: ['var(--sage)', 'var(--accent-ink)']
 };
 
@@ -145,7 +146,12 @@ export function Review({ subtitle, items, notes, onBack, onChange, onAmount, onR
                     ×
                   </button>
                 </div>
-                <div style={{ display: 'inline-block', maxWidth: '100%', marginTop: 6, height: 22, lineHeight: '22px', padding: '0 9px', borderRadius: 999, background: hintBg, color: hintInk, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.hint}</div>
+                {it.sourceUrl ? (
+                  // the page the numbers came from, to check them in one tap
+                  <a href={it.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', maxWidth: '100%', marginTop: 6, height: 22, lineHeight: '22px', padding: '0 9px', borderRadius: 999, background: hintBg, color: hintInk, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'underline', textUnderlineOffset: 2 }}>{it.hint} ↗</a>
+                ) : (
+                  <div style={{ display: 'inline-block', maxWidth: '100%', marginTop: 6, height: 22, lineHeight: '22px', padding: '0 9px', borderRadius: 999, background: hintBg, color: hintInk, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.hint}</div>
+                )}
                 {it.amountNote && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>Amount: {it.amountNote}</div>}
                 {it.low && <div style={{ fontSize: 12, color: 'var(--est)', marginTop: 6 }}>{it.lowNote}</div>}
                 {blank(it) && <div style={{ fontSize: 12, color: 'var(--est)', marginTop: 6 }}>Empty fields count as 0. Fill them in, or re-run to have them found</div>}

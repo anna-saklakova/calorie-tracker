@@ -43,9 +43,10 @@ export const ANALYZE_STEPS = [
   'Reading the photos and your note…',
   'Checking labels for nutrition facts…',
   'Matching with your library…',
+  'Looking up nutrition online…',
   'Working out the amounts…'
 ];
-export const ANALYZE_CONTEXT = 'Uses your photos, your note and your saved products. Anything it can’t read is estimated and marked.';
+export const ANALYZE_CONTEXT = 'Uses your photos, your note and your saved products, then looks up the rest online. Anything it can’t find is estimated and marked.';
 
 /** Long side in px. Labels keep more detail for the small print. */
 const SIZES: [plate: number, label: number][] = [[1600, 2048], [1280, 1600], [1024, 1280]];
@@ -62,6 +63,7 @@ export function libraryEntries(library: Product[]): LibraryEntry[] {
 const NUTRITION_HINT: Record<FinalFood['nutrition_source'], string> = {
   package: 'Label',
   product_db: 'Your library',
+  web: 'Web',
   generic_db: 'Common values',
   llm_estimate: 'AI estimate'
 };
@@ -76,7 +78,7 @@ export function toReviewItem(f: FinalFood): ReviewItem {
   const src: Source =
     f.nutrition_source === 'package' ? 'label'
     : f.nutrition_source === 'product_db' ? 'library'
-    : f.nutrition_source === 'generic_db' && f.amount_source !== 'visual_estimate' ? 'note'
+    : f.nutrition_source === 'web' ? 'web'
     : 'estimated';
   const llm = f.nutrition_source === 'llm_estimate';
   return {
@@ -90,11 +92,12 @@ export function toReviewItem(f: FinalFood): ReviewItem {
     per: { kcal: f.per100.kcal / 100, p: f.per100.protein_g / 100, f: f.per100.fat_g / 100, c: f.per100.carbs_g / 100 },
     src,
     // what the nutrients are based on (per 100 g), so a misread label is visible at a glance
-    hint: `${NUTRITION_HINT[f.nutrition_source]}${f.nutrition_source === 'product_db' && f.matched_name ? ` · ${f.matched_name}` : ''} · ${Math.round(f.per100.kcal)} kcal/100 g · ${AMOUNT_HINT[f.amount_source]}`,
+    hint: `${NUTRITION_HINT[f.nutrition_source]}${f.nutrition_source === 'product_db' && f.matched_name ? ` · ${f.matched_name}` : ''}${f.source_name ? ` · ${f.source_name}` : ''} · ${Math.round(f.per100.kcal)} kcal/100 g · ${AMOUNT_HINT[f.amount_source]}`,
+    sourceUrl: f.source_url ?? undefined,
     // label data is worth keeping in the library for next time
     save: f.nutrition_source === 'package',
     low: llm,
-    lowNote: llm ? 'No label or match found · nutrients are an AI estimate' : undefined,
+    lowNote: llm ? 'No label, library match or web result · nutrients are an AI estimate' : undefined,
     amountNote: f.amount_basis ?? undefined,
     amountSource: f.amount_source,
     nutritionSource: f.nutrition_source
@@ -208,6 +211,7 @@ export const recognize: Recognizer = async (input, signal) => {
   const notes: string[] = [];
   if (items.some(i => i.low)) notes.push('Some nutrients are AI estimates (marked). Check them before saving.');
   if (data.meal.foods.some(f => f.amount_source === 'visual_estimate')) notes.push('Amounts marked ~ are judged from the photo.');
+  if (data.meal.search_failed) notes.push('The online lookup didn’t answer in time, so some nutrients are AI estimates (marked). Re-run to try again.');
   if (data.meal.unmatched_package_image_ids.length) notes.push('A label photo couldn’t be tied to a food, so it wasn’t used.');
   if (data.meal.foods.some(f => f.energy_fix === 'kj')) notes.push('A label listed energy in kJ; it was converted to kcal.');
   if (data.meal.foods.some(f => f.energy_fix === 'macros')) notes.push('A label’s calories didn’t match its protein, fat and carbs, so they were recalculated from those. Check the label values.');

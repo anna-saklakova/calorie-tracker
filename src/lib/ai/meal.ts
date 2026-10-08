@@ -1,6 +1,5 @@
-import { GENERIC_BY_ID } from './genericFoods.js';
 import { AMOUNT_SOURCES } from './types.js';
-import type { FinalFood, FinalMeal, IntermediateFood, IntermediateMeal, LibraryEntry, Nutrients, NutritionSource, PackageData, Per100 } from './types.js';
+import type { FinalFood, FinalMeal, IntermediateFood, IntermediateMeal, LibraryEntry, Nutrients, NutritionSource, PackageData, Per100, WebFind } from './types.js';
 
 // Deterministic part of the pipeline (spec §11, §13): pick a nutrition source per food,
 // then do the arithmetic. No model involved.
@@ -57,15 +56,22 @@ function estimatePer100(e: Per100 | null | undefined): Per100 {
   };
 }
 
-/** Priority: package → user's library (product_db) → generic DB → model estimate. */
-export function chooseNutrition(food: IntermediateFood, library: Map<string, LibraryEntry>): { source: NutritionSource; per100: Per100; matchedName: string | null; energyFix: 'kj' | 'macros' | null } {
+/** Label or library already covers the food, so it needs no web lookup. */
+export const coveredWithoutSearch = (food: IntermediateFood, library: Map<string, LibraryEntry>) =>
+  !!packagePer100(food.package_data) || !!(food.library_product_id && library.has(food.library_product_id));
+
+/** Priority: package → user's library (product_db) → the web → model estimate. */
+export function chooseNutrition(
+  food: IntermediateFood,
+  library: Map<string, LibraryEntry>,
+  web?: WebFind
+): { source: NutritionSource; per100: Per100; matchedName: string | null; energyFix: 'kj' | 'macros' | null; web: WebFind | null } {
   const label = packagePer100(food.package_data);
-  if (label) return { source: 'package', per100: label.per100, matchedName: null, energyFix: label.energyFix };
+  if (label) return { source: 'package', per100: label.per100, matchedName: null, energyFix: label.energyFix, web: null };
   const own = food.library_product_id ? library.get(food.library_product_id) : undefined;
-  if (own) return { source: 'product_db', per100: own.per100, matchedName: own.name, energyFix: null };
-  const generic = food.generic_food_id ? GENERIC_BY_ID.get(food.generic_food_id) : undefined;
-  if (generic) return { source: 'generic_db', per100: generic.per100, matchedName: generic.name, energyFix: null };
-  return { source: 'llm_estimate', per100: estimatePer100(food.estimate_per_100g), matchedName: null, energyFix: null };
+  if (own) return { source: 'product_db', per100: own.per100, matchedName: own.name, energyFix: null, web: null };
+  if (web) return { source: 'web', per100: web.per100, matchedName: null, energyFix: null, web };
+  return { source: 'llm_estimate', per100: estimatePer100(food.estimate_per_100g), matchedName: null, energyFix: null, web: null };
 }
 
 export function nutrientsFor(per100: Per100, amountG: number): Nutrients {
@@ -91,15 +97,17 @@ export function sumNutrients(list: Nutrients[]): Nutrients {
 }
 
 /** Turns the model's intermediate JSON into the final meal: sources chosen, nutrients calculated, totals summed. */
-export function buildMeal(meal: IntermediateMeal, libraryEntries: LibraryEntry[], checkedCount = 0): FinalMeal {
+export function buildMeal(meal: IntermediateMeal, libraryEntries: LibraryEntry[], checkedCount = 0, web: Map<number, WebFind> = new Map()): FinalMeal {
   const library = new Map(libraryEntries.map(p => [p.id, p]));
   const foods: FinalFood[] = (meal.foods ?? [])
-    .filter(f => f && typeof f.name === 'string' && f.name.trim())
-    .map((f, i) => {
+    // the model's index stays with each food, so the web finds (keyed by it) land on the right one
+    .map((f, n) => ({ f, n }))
+    .filter(({ f }) => f && typeof f.name === 'string' && f.name.trim())
+    .map(({ f, n }, i) => {
       // The amount is the model's reading of the user's words or the photo; it is never re-estimated here.
       const amount = finite(f.amount_g) ? r2(Math.min(Math.max(f.amount_g, 0), MAX_AMOUNT_G)) : 0;
       const amountSource = AMOUNT_SOURCES.includes(f.amount_source) ? f.amount_source : 'visual_estimate';
-      const { source, per100, matchedName, energyFix } = chooseNutrition(f, library);
+      const { source, per100, matchedName, energyFix, web: found } = chooseNutrition(f, library, web.get(n));
       return {
         id: `food_${i + 1}`,
         name: f.name.trim(),
@@ -112,6 +120,8 @@ export function buildMeal(meal: IntermediateMeal, libraryEntries: LibraryEntry[]
         nutrition_source: source,
         per100,
         matched_name: matchedName,
+        source_name: found?.source_name ?? null,
+        source_url: found?.source_url ?? null,
         energy_fix: energyFix,
         checked_index: Number.isInteger(f.checked_item) && f.checked_item! >= 1 && f.checked_item! <= checkedCount ? f.checked_item! - 1 : null
       };
