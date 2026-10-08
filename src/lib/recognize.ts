@@ -3,7 +3,7 @@ import { r1 } from './nutrition';
 import { supabase } from './supabase';
 import { uid } from './types';
 import type { Photo, Product, ReviewItem, Source } from './types';
-import type { FinalFood, LibraryEntry, RecognizeRequest, RecognizeResponse, RecognizeTrace } from './ai/types';
+import type { CheckedItem, FinalFood, LibraryEntry, RecognizeRequest, RecognizeResponse, RecognizeTrace } from './ai/types';
 
 export interface RecognizeInput {
   photos: Pick<Photo, 'kind' | 'file'>[];
@@ -11,7 +11,7 @@ export interface RecognizeInput {
   library: Product[];
   /** a correction added on the Review screen ("the meat was 200 g, not 110"); already appended to text */
   correction?: string;
-  /** the current review items when re-running with a correction */
+  /** the Review rows as the user left them, when re-running with a correction: their edits are kept */
   previous?: ReviewItem[];
 }
 
@@ -101,6 +101,42 @@ export function toReviewItem(f: FinalFood): ReviewItem {
   };
 }
 
+const given = (v: number | string) => (v === '' || v === null || v === undefined || !Number.isFinite(+v) ? null : +v);
+
+/** A Review row as the model sees it on a re-run. Empty fields stay null, so the model knows to find them. */
+export function checkedItem(it: ReviewItem): CheckedItem {
+  return { name: it.name.trim(), amount_g: given(it.amount), kcal: given(it.kcal), protein_g: given(it.p), fat_g: given(it.f), carbs_g: given(it.c) };
+}
+
+/**
+ * After a re-run, a row the user had typed nutrients into keeps those numbers (rescaled if the amount
+ * changed); the model's values fill only the fields the user left empty.
+ */
+export function keepUserNutrients(item: ReviewItem, prev: ReviewItem | undefined): ReviewItem {
+  if (!prev) return item;
+  const set = (prev.userSet ?? []).filter(k => given(prev[k]) !== null);
+  const out: ReviewItem = { ...item, manual: prev.manual, save: prev.save || item.save };
+  if (!set.length) return out;
+  const prevAmount = +prev.amount || 0;
+  for (const k of set) {
+    const v = prevAmount > 0 ? (+prev[k] / prevAmount) * out.amount : +prev[k];
+    out[k] = k === 'kcal' ? Math.round(v) : r1(v);
+    out.per = { ...out.per, [k]: out.amount ? out[k] / out.amount : 0 };
+  }
+  out.userSet = set;
+  out.src = 'note';
+  out.low = false;
+  out.lowNote = undefined;
+  out.hint = set.length === 4 ? `Your numbers · ${Math.round(out.per.kcal * 100)} kcal/100 g` : `Partly your numbers · ${item.hint}`;
+  return out;
+}
+
+/** An empty row the user adds on the Review screen; whatever they leave blank a re-run can find. */
+export function newReviewItem(): ReviewItem {
+  const e = '' as unknown as number;
+  return { id: uid(), name: '', amount: e, kcal: e, p: e, f: e, c: e, per: { kcal: 0, p: 0, f: 0, c: 0 }, src: 'note', hint: 'Added by you', save: false, manual: true, userSet: [] };
+}
+
 async function encodePhotos(photos: RecognizeInput['photos']) {
   for (const [plate, label] of SIZES) {
     const images = await Promise.all(
@@ -144,7 +180,7 @@ export const recognize: Recognizer = async (input, signal) => {
   }
   if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
-  const body: RecognizeRequest = { images, text: input.text, voiceTranscript: '', library: libraryEntries(input.library) };
+  const body: RecognizeRequest = { images, text: input.text, voiceTranscript: '', library: libraryEntries(input.library), checked: input.previous?.map(checkedItem) };
   const at = new Date().toISOString();
   const started = Date.now();
   const seconds = () => Math.round((Date.now() - started) / 1000);
@@ -168,7 +204,7 @@ export const recognize: Recognizer = async (input, signal) => {
   if (!data) return { status: 'failed', ...httpFailure(res.status), seconds: seconds() };
   if (data.status === 'failed') return { ...data, code: data.code || `http_${res.status}`, seconds: seconds() };
 
-  const items = data.meal.foods.map(toReviewItem);
+  const items = data.meal.foods.map(f => keepUserNutrients(toReviewItem(f), f.checked_index !== null && f.checked_index !== undefined ? input.previous?.[f.checked_index] : undefined));
   const notes: string[] = [];
   if (items.some(i => i.low)) notes.push('Some nutrients are AI estimates (marked). Check them before saving.');
   if (data.meal.foods.some(f => f.amount_source === 'visual_estimate')) notes.push('Amounts marked ~ are judged from the photo.');

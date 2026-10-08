@@ -34,11 +34,26 @@ export interface LibraryEntry {
   per100: Per100;
 }
 
+/**
+ * One row of the Review screen as the user left it, sent with a re-run so their edits are kept.
+ * Nutrients are for the whole amount; null where the user left the field empty (a food added by hand).
+ */
+export interface CheckedItem {
+  name: string;
+  amount_g: number | null;
+  kcal: number | null;
+  protein_g: number | null;
+  fat_g: number | null;
+  carbs_g: number | null;
+}
+
 export interface RecognizeRequest {
   images: MealImage[];
   text: string;
   voiceTranscript: string;
   library: LibraryEntry[];
+  /** a re-run from the Review screen: the list as the user checked and edited it */
+  checked?: CheckedItem[];
 }
 
 // ── Model output (intermediate JSON, §9 of the spec) ────────
@@ -69,6 +84,8 @@ export interface IntermediateFood {
   generic_food_id: string | null;
   /** model's own per-100 g guess; used only when nothing better exists (llm_estimate) */
   estimate_per_100g: Per100;
+  /** on a re-run: the number (1-based) of the checked-list row this food is, null for a new food */
+  checked_item: number | null;
 }
 
 export interface IntermediateMeal {
@@ -95,6 +112,8 @@ export interface FinalFood {
   matched_name: string | null;
   /** set when the label's energy value didn't match its macros: 'kj' = it was kJ and got converted, 'macros' = replaced by the energy the macros imply */
   energy_fix: 'kj' | 'macros' | null;
+  /** on a re-run: index (0-based) of the checked-list row this food is, null for a new one */
+  checked_index: number | null;
 }
 
 export interface FinalMeal {

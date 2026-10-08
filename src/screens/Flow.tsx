@@ -44,7 +44,7 @@ export function Analyzing({ preparing, onCancel }: { preparing?: string | null; 
 /** The short reason and how long it took, e.g. "openai_timeout · 112 s", for reporting a problem. */
 export const failureDetail = (code?: string, seconds?: number) => [code, seconds !== undefined ? `${seconds} s` : ''].filter(Boolean).join(' · ');
 
-export function Failed({ message, detail, onRetry, onManual }: { message: string; detail?: string; onRetry: () => void; onManual: () => void }) {
+export function Failed({ message, detail, onTryAgain, onRetry, onManual }: { message: string; detail?: string; onTryAgain: () => void; onRetry: () => void; onManual: () => void }) {
   return (
     <div className="center-state" style={{ padding: '0 36px' }}>
       <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--surface-2)', display: 'grid', placeItems: 'center' }}>
@@ -58,7 +58,8 @@ export function Failed({ message, detail, onRetry, onManual }: { message: string
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', marginTop: 36 }}>
-        <button className="btn-primary" onClick={onRetry}>Retake or add a note</button>
+        <button className="btn-primary" onClick={onTryAgain}>Try again</button>
+        <button className="btn-ghost" onClick={onRetry}>Change photos or note</button>
         <button className="btn-ghost" onClick={onManual}>Add by hand instead</button>
       </div>
     </div>
@@ -82,16 +83,30 @@ interface ReviewProps {
   onChange: (id: string, patch: (it: ReviewItem) => ReviewItem) => void;
   onAmount: (id: string, v: string) => void;
   onRemove: (id: string) => void;
+  onAdd: () => void;
   onConfirm: () => void;
   onReRun: (note: string) => void;
+  /** the correction being typed; kept outside so a failed re-run doesn't lose it */
+  note: string;
+  setNote: (v: string) => void;
+  /** why the last re-run failed; the list stays as it was */
+  error: string;
 }
 
-export function Review({ subtitle, items, notes, onBack, onChange, onAmount, onRemove, onConfirm, onReRun }: ReviewProps) {
-  const [noteOpen, setNoteOpen] = useState(false);
-  const [note, setNote] = useState('');
+/** a nutrient field left empty (an item added by hand, or a value cleared) */
+const blank = (it: ReviewItem) => (['kcal', 'p', 'f', 'c'] as const).some(k => (it[k] as unknown) === '');
+
+export function Review({ subtitle, items, notes, onBack, onChange, onAmount, onRemove, onAdd, onConfirm, onReRun, note, setNote, error }: ReviewProps) {
+  const [noteOpen, setNoteOpen] = useState(!!note || !!error);
   const tot = sumMacros(items);
   const setMacro = (it: ReviewItem, k: 'kcal' | 'p' | 'f' | 'c', v: string) =>
-    onChange(it.id, x => ({ ...x, [k]: v === '' ? ('' as unknown as number) : +v, per: { ...x.per, [k]: (+v || 0) / (x.amount || 1) } }));
+    onChange(it.id, x => ({
+      ...x,
+      [k]: v === '' ? ('' as unknown as number) : +v,
+      per: { ...x.per, [k]: (+v || 0) / (+x.amount || 1) },
+      userSet: v === '' ? (x.userSet ?? []).filter(f => f !== k) : [...new Set([...(x.userSet ?? []), k])]
+    }));
+  const incomplete = items.some(blank);
 
   return (
     <div className="screen rise">
@@ -103,7 +118,12 @@ export function Review({ subtitle, items, notes, onBack, onChange, onAmount, onR
             {notes.map(n => <div key={n}>{n}</div>)}
           </div>
         )}
-        {!items.length && <div className="secondary" style={{ textAlign: 'center', padding: '40px 24px' }}>All items removed. Go back to add a photo or a note.</div>}
+        {error && (
+          <div role="alert" style={{ marginTop: 14, background: 'var(--est-soft)', borderRadius: 16, padding: '12px 14px', fontSize: 14, color: 'var(--est-text)', textWrap: 'pretty' }}>
+            Re-run didn’t work, your list is unchanged. {error}
+          </div>
+        )}
+        {!items.length && <div className="secondary" style={{ textAlign: 'center', padding: '40px 24px' }}>All items removed. Add one below, or go back to add a photo or a note.</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
           {items.map(it => {
             const est = it.amountSource ? it.amountSource === 'visual_estimate' : it.src === 'estimated';
@@ -115,6 +135,8 @@ export function Review({ subtitle, items, notes, onBack, onChange, onAmount, onR
                   <input
                     value={it.name}
                     aria-label="Item name"
+                    placeholder="What was it?"
+                    autoFocus={it.manual && !it.name}
                     onChange={e => onChange(it.id, x => ({ ...x, name: e.target.value }))}
                     className="review-name"
                     style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', fontSize: 17, fontWeight: 600, padding: 0, borderBottom: '1px dashed transparent' }}
@@ -126,6 +148,7 @@ export function Review({ subtitle, items, notes, onBack, onChange, onAmount, onR
                 <div style={{ display: 'inline-block', maxWidth: '100%', marginTop: 6, height: 22, lineHeight: '22px', padding: '0 9px', borderRadius: 999, background: hintBg, color: hintInk, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.hint}</div>
                 {it.amountNote && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 6 }}>Amount: {it.amountNote}</div>}
                 {it.low && <div style={{ fontSize: 12, color: 'var(--est)', marginTop: 6 }}>{it.lowNote}</div>}
+                {blank(it) && <div style={{ fontSize: 12, color: 'var(--est)', marginTop: 6 }}>Empty fields count as 0. Fill them in, or re-run to have them found</div>}
                 <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr 1fr 1fr 1fr', gap: 4, marginTop: 12 }}>
                   <label className="field" style={{ gap: 3 }}>
                     <span>Amount</span>
@@ -155,6 +178,9 @@ export function Review({ subtitle, items, notes, onBack, onChange, onAmount, onR
               </div>
             );
           })}
+          <button className="btn-ghost" onClick={onAdd} style={{ border: '1px dashed var(--faint)', borderRadius: 20 }}>
+            + Add an item
+          </button>
         </div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '22px 4px 4px' }}>
           <span style={{ fontSize: 15, fontWeight: 600 }}>Meal total</span>
@@ -177,15 +203,15 @@ export function Review({ subtitle, items, notes, onBack, onChange, onAmount, onR
               placeholder="e.g. the meat was 200 g, not 110"
               style={{ marginTop: 6, width: '100%', border: 'none', background: 'transparent', resize: 'none', fontSize: 16, lineHeight: 1.45, display: 'block' }}
             />
-            <button className="btn-small-dark" style={{ marginTop: 8 }} disabled={!note.trim()} onClick={() => onReRun(note.trim())}>
-              Re-run with note
+            <button className="btn-small-dark" style={{ marginTop: 8 }} disabled={!note.trim() && !incomplete} onClick={() => onReRun(note.trim())}>
+              {note.trim() || !incomplete ? 'Re-run with note' : 'Re-run to fill the gaps'}
             </button>
           </div>
         )}
       </div>
       <div className="footer">
         <button className="btn-primary" disabled={!items.length} onClick={onConfirm}>Confirm & save</button>
-        <button className="btn-ghost" onClick={() => setNoteOpen(o => !o)}>{noteOpen ? 'Cancel note' : 'Add a note & re-run'}</button>
+        <button className="btn-ghost" onClick={() => setNoteOpen(o => !o)}>{noteOpen ? 'Hide note' : 'Add a note & re-run'}</button>
       </div>
     </div>
   );

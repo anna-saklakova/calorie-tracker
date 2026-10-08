@@ -28,112 +28,183 @@ async function transcribe(blob: Blob): Promise<string> {
   return data.text ?? '';
 }
 
+/** What `finish` found: the voice notes are all in the text, or one couldn't be transcribed (kept for another try). */
+export type VoiceOutcome = { ok: true } | { ok: false; message: string };
+
+export interface VoiceState {
+  recording: boolean;
+  transcribing: boolean;
+  /** recordings whose transcription failed; the next `finish` tries them again */
+  failed: number;
+}
+
+/** The browser parts, swappable in tests. */
+export interface VoiceDeps {
+  getStream: () => Promise<MediaStream>;
+  createRecorder: (stream: MediaStream) => MediaRecorder;
+  transcribe: (blob: Blob) => Promise<string>;
+}
+
+const browserDeps: VoiceDeps = {
+  getStream: () => navigator.mediaDevices.getUserMedia({ audio: true }),
+  createRecorder: stream => {
+    const mimeType = MIME_TYPES.find(t => MediaRecorder.isTypeSupported(t));
+    return new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  },
+  transcribe
+};
+
 /**
- * Records a voice note; when it stops, the audio is transcribed and handed to `onText`.
- * Problems with the recording itself (no mic, nothing recorded, transcription failed) go to `onError` at once.
- * `cancel` stops without transcribing (e.g. when leaving the screen). `finish` stops a recording if one is
- * running and resolves once the transcript has been handed over (null if there is none), so Recognize can
- * be pressed before the voice note is ready.
+ * Records voice notes; each one, once stopped, is transcribed and handed to `onText`. Nothing said is
+ * dropped: `finish` (called by Recognize) stops a recording that is starting or running, waits for its
+ * transcript, and retries recordings whose transcription failed, so Recognize can be pressed at any moment.
+ * Only `cancel` (leaving the screen) throws a recording away.
  */
+export class VoiceRecorder {
+  state: VoiceState = { recording: false, transcribing: false, failed: 0 };
+  /** settles once the current recording (from the mic tap until its transcript) is done */
+  private active: Promise<void> | null = null;
+  private rec: MediaRecorder | null = null;
+  private stopWanted = false;
+  private discard = false;
+  private failed: Blob[] = [];
+  private lastError = '';
+
+  constructor(
+    private on: { text: (t: string) => void; error: (msg: string) => void; change: (s: VoiceState) => void },
+    private deps: VoiceDeps = browserDeps
+  ) {}
+
+  private set(s: Partial<VoiceState>) {
+    this.state = { ...this.state, ...s, failed: this.failed.length };
+    this.on.change(this.state);
+  }
+
+  /** Transcribes one recording, trying once more if it fails; a recording that still fails is kept. */
+  private async transcribeBlob(blob: Blob): Promise<boolean> {
+    this.set({ transcribing: true });
+    try {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const text = (await this.deps.transcribe(blob)).trim();
+          if (text) this.on.text(text);
+          else this.on.error('Couldn’t hear anything in the voice note. Try again closer to the mic');
+          return true;
+        } catch (e) {
+          if (attempt < 1) continue;
+          this.lastError = (e as Error).message || 'Couldn’t transcribe the voice note';
+          this.failed.push(blob);
+          this.on.error(`${this.lastError}. The recording is kept: Recognize will try it again`);
+          return false;
+        }
+      }
+    } finally {
+      this.set({ transcribing: false });
+    }
+  }
+
+  start(): void {
+    if (this.active) return;
+    this.stopWanted = false;
+    this.discard = false;
+    this.active = this.record().finally(() => (this.active = null));
+  }
+
+  private async record(): Promise<void> {
+    let stream: MediaStream;
+    try {
+      stream = await this.deps.getStream();
+    } catch {
+      return this.on.error('Microphone access is off for this site');
+    }
+    const release = () => stream.getTracks().forEach(t => t.stop());
+    // Recognize or leaving the screen came while the mic was still opening: nothing was said yet
+    if (this.stopWanted || this.discard) return release();
+    let r: MediaRecorder;
+    try {
+      r = this.deps.createRecorder(stream);
+    } catch {
+      release();
+      return this.on.error('Couldn’t start recording in this browser');
+    }
+    const chunks: Blob[] = [];
+    const stopped = new Promise<void>(resolve => {
+      r.ondataavailable = e => void (e.data.size && chunks.push(e.data));
+      r.onstop = () => resolve();
+    });
+    this.rec = r;
+    r.start();
+    this.set({ recording: true });
+    await stopped;
+    release();
+    this.rec = null;
+    this.set({ recording: false });
+    if (this.discard) return;
+    const blob = new Blob(chunks, { type: r.mimeType || 'audio/webm' });
+    if (!blob.size) return this.on.error('Nothing was recorded. Try again');
+    await this.transcribeBlob(blob);
+  }
+
+  /** The mic button: a second tap stops, even while the mic is still opening. */
+  toggle(): void {
+    if (this.active && !this.state.transcribing) this.stop();
+    else this.start();
+  }
+
+  stop(): void {
+    this.stopWanted = true;
+    if (this.rec?.state === 'recording') this.rec.stop();
+  }
+
+  cancel(): void {
+    this.discard = true;
+    this.failed = [];
+    this.stop();
+    this.set({});
+  }
+
+  /** Everything said so far ends up in the text before this resolves, or the outcome says why not. */
+  async finish(): Promise<VoiceOutcome> {
+    // recordings that failed before this press get another try; the one stopped now has had its retry already
+    const earlier = this.failed.splice(0);
+    this.stop();
+    await this.active;
+    for (const blob of earlier) await this.transcribeBlob(blob);
+    this.set({});
+    return this.failed.length ? { ok: false, message: this.lastError } : { ok: true };
+  }
+}
+
+/** The recorder for a React screen, with a seconds counter that stops recording after MAX_SECONDS. */
 export function useVoiceNote(onText: (t: string) => void, onError: (msg: string) => void) {
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
+  const [state, setState] = useState<VoiceState>({ recording: false, transcribing: false, failed: 0 });
   const [seconds, setSeconds] = useState(0);
-  const rec = useRef<MediaRecorder | null>(null);
-  const discard = useRef(false);
-  const pending = useRef<Promise<string | null> | null>(null);
   const cb = useRef({ onText, onError });
   cb.current = { onText, onError };
+  const ref = useRef<VoiceRecorder | null>(null);
+  if (!ref.current) ref.current = new VoiceRecorder({ text: t => cb.current.onText(t), error: m => cb.current.onError(m), change: setState });
+  const r = ref.current;
 
-  useEffect(() => () => cancel(), []);
+  useEffect(() => () => r.cancel(), []);
 
   useEffect(() => {
-    if (!recording) return;
+    if (!state.recording) return;
     setSeconds(0);
     const started = Date.now();
     const iv = setInterval(() => {
       const s = Math.floor((Date.now() - started) / 1000);
       setSeconds(s);
-      if (s >= MAX_SECONDS) stop();
+      if (s >= MAX_SECONDS) r.stop();
     }, 500);
     return () => clearInterval(iv);
-  }, [recording]);
+  }, [state.recording]);
 
-  const start = async () => {
-    if (!voiceSupported()) {
-      cb.current.onError('Voice notes aren’t supported in this browser');
-      return;
-    }
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      cb.current.onError('Microphone access is off for this site');
-      return;
-    }
-    const mimeType = MIME_TYPES.find(t => MediaRecorder.isTypeSupported(t));
-    let r: MediaRecorder;
-    try {
-      r = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-    } catch {
-      stream.getTracks().forEach(t => t.stop());
-      cb.current.onError('Couldn’t start recording in this browser');
-      return;
-    }
-    const chunks: Blob[] = [];
-    let resolve: (t: string | null) => void = () => {};
-    const done = new Promise<string | null>(res => (resolve = res));
-    const settle = (t: string | null) => {
-      if (pending.current === done) pending.current = null;
-      resolve(t);
-    };
-    discard.current = false;
-    r.ondataavailable = e => e.data.size && chunks.push(e.data);
-    r.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop());
-      setRecording(false);
-      rec.current = null;
-      if (discard.current) return settle(null);
-      const blob = new Blob(chunks, { type: r.mimeType || mimeType || 'audio/webm' });
-      if (!blob.size) {
-        cb.current.onError('Nothing was recorded. Try again');
-        return settle(null);
-      }
-      setTranscribing(true);
-      let text: string | null = null;
-      try {
-        text = (await transcribe(blob)) || null;
-        if (text) cb.current.onText(text);
-        else cb.current.onError('Couldn’t hear anything. Try again closer to the mic');
-      } catch (e) {
-        cb.current.onError((e as Error).message);
-      } finally {
-        setTranscribing(false);
-        settle(text);
-      }
-    };
-    rec.current = r;
-    pending.current = done;
-    r.start();
-    setRecording(true);
+  const toggle = () => {
+    if (!state.recording && !voiceSupported()) return cb.current.onError('Voice notes aren’t supported in this browser');
+    r.toggle();
   };
 
-  const stop = () => {
-    if (rec.current?.state === 'recording') rec.current.stop();
-  };
-  const cancel = () => {
-    discard.current = true;
-    stop();
-  };
-
-  const finish = (): Promise<string | null> => {
-    const p = pending.current;
-    if (!p) return Promise.resolve(null);
-    stop();
-    return p;
-  };
-
-  return { recording, transcribing, seconds, toggle: () => (recording ? stop() : start()), stop, cancel, finish };
+  return { ...state, seconds, toggle, stop: () => r.stop(), cancel: () => r.cancel(), finish: () => r.finish() };
 }
 
 export type VoiceNote = ReturnType<typeof useVoiceNote>;

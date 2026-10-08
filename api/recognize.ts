@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { buildMeal } from '../src/lib/ai/meal.js';
 import { mealSchema, SYSTEM_PROMPT, userContent } from '../src/lib/ai/prompt.js';
-import type { IntermediateMeal, RecognizeRequest, RecognizeTrace } from '../src/lib/ai/types.js';
+import type { CheckedItem, IntermediateMeal, RecognizeRequest, RecognizeTrace } from '../src/lib/ai/types.js';
 import { authorize, config, fail, json, openai, tooBig } from './_lib/server.js';
 import type { OpenAIError } from './_lib/server.js';
 
@@ -38,9 +38,18 @@ export async function POST(req: Request): Promise<Response> {
   const library = (Array.isArray(body.library) ? body.library : [])
     .filter(p => typeof p?.id === 'string' && typeof p?.name === 'string' && p.per100)
     .slice(0, MAX_LIBRARY);
-  if (!images.length && !text.trim() && !voice.trim()) return fail(400, 'Add a photo or a note first', 'empty');
+  const num = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : null);
+  const checked: CheckedItem[] = (Array.isArray(body.checked) ? body.checked : []).slice(0, 40).map(c => ({
+    name: typeof c?.name === 'string' ? c.name.slice(0, 120) : '',
+    amount_g: num(c?.amount_g),
+    kcal: num(c?.kcal),
+    protein_g: num(c?.protein_g),
+    fat_g: num(c?.fat_g),
+    carbs_g: num(c?.carbs_g)
+  }));
+  if (!images.length && !text.trim() && !voice.trim() && !checked.length) return fail(400, 'Add a photo or a note first', 'empty');
 
-  const inputText = userContent(text, voice, library, images);
+  const inputText = userContent(text, voice, library, images, checked);
   const content: unknown[] = [{ type: 'input_text', text: inputText }];
   for (const img of images) {
     content.push({ type: 'input_text', text: `Image ${img.id}:` });
@@ -105,7 +114,7 @@ export async function POST(req: Request): Promise<Response> {
   } catch {
     return fail(502, 'Recognition gave an unreadable answer. Try again', 'openai_bad_json');
   }
-  const final = buildMeal(meal, library);
+  const final = buildMeal(meal, library, checked.length);
   console.log(`recognize ok in ${secs} s: ${final.foods.length} foods, ${images.length} photos, ${Math.round(imageBytes / 1024)} KB, tokens ${out.usage?.input_tokens ?? '?'}/${out.usage?.output_tokens ?? '?'}`);
   if (!final.foods.length) {
     return json({

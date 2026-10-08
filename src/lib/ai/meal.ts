@@ -91,7 +91,7 @@ export function sumNutrients(list: Nutrients[]): Nutrients {
 }
 
 /** Turns the model's intermediate JSON into the final meal: sources chosen, nutrients calculated, totals summed. */
-export function buildMeal(meal: IntermediateMeal, libraryEntries: LibraryEntry[]): FinalMeal {
+export function buildMeal(meal: IntermediateMeal, libraryEntries: LibraryEntry[], checkedCount = 0): FinalMeal {
   const library = new Map(libraryEntries.map(p => [p.id, p]));
   const foods: FinalFood[] = (meal.foods ?? [])
     .filter(f => f && typeof f.name === 'string' && f.name.trim())
@@ -112,7 +112,8 @@ export function buildMeal(meal: IntermediateMeal, libraryEntries: LibraryEntry[]
         nutrition_source: source,
         per100,
         matched_name: matchedName,
-        energy_fix: energyFix
+        energy_fix: energyFix,
+        checked_index: Number.isInteger(f.checked_item) && f.checked_item! >= 1 && f.checked_item! <= checkedCount ? f.checked_item! - 1 : null
       };
     });
   return { foods, total: sumNutrients(foods.map(f => f.nutrition)), unmatched_package_image_ids: meal.unmatched_package_image_ids ?? [] };

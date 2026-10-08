@@ -28,14 +28,17 @@ export function AddMeal({ draft, days, today, datePick, toggleDatePick, setDraft
   const snacks = snackOptions(days[draft.date]);
   const cam = useRef<HTMLInputElement>(null);
   const gal = useRef<HTMLInputElement>(null);
-  const busyVoice = voice.recording || voice.transcribing;
-  // a voice note still recording or transcribing, or photos still loading, are finished after Recognize is pressed
+  const busyVoice = voice.recording || voice.transcribing || voice.failed > 0;
+  // a voice note still recording or transcribing (or kept after a failed transcription), or photos still loading,
+  // are finished after Recognize is pressed
   const cantRecognize = !busyVoice && !photosLoading && !draft.text.trim() && !draft.photos.length;
 
   const clock = `${Math.floor(voice.seconds / 60)}:${String(voice.seconds % 60).padStart(2, '0')}`;
   const recHint = voice.recording
     ? `Recording · ${clock} · tap to stop`
-    : voice.transcribing ? 'Turning your voice note into text…' : draft.text ? 'Transcript is editable' : 'Hold a thought? Tap the mic';
+    : voice.transcribing ? 'Turning your voice note into text…'
+    : voice.failed ? 'Voice note not transcribed yet · Recognize will retry'
+    : draft.text ? 'Transcript is editable' : 'Hold a thought? Tap the mic';
 
   return (
     <div className="screen rise">

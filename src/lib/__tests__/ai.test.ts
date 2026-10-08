@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { GENERIC_FOODS } from '../ai/genericFoods';
 import { buildMeal, packagePer100 } from '../ai/meal';
-import { mealSchema } from '../ai/prompt';
+import { mealSchema, userContent } from '../ai/prompt';
 import type { IntermediateFood, LibraryEntry, PackageData } from '../ai/types';
-import { httpFailure, libraryEntries, toReviewItem } from '../recognize';
+import { checkedItem, httpFailure, keepUserNutrients, libraryEntries, newReviewItem, toReviewItem } from '../recognize';
+import type { ReviewItem } from '../types';
 
 const est = { kcal: 100, protein_g: 5, fat_g: 5, carbs_g: 10, fiber_g: null };
 const food = (over: Partial<IntermediateFood>): IntermediateFood => ({
@@ -17,6 +18,7 @@ const food = (over: Partial<IntermediateFood>): IntermediateFood => ({
   library_product_id: null,
   generic_food_id: null,
   estimate_per_100g: est,
+  checked_item: null,
   ...over
 });
 const label = (over: Partial<PackageData> = {}): PackageData => ({
@@ -155,5 +157,32 @@ describe('failure reporting', () => {
     expect(httpFailure(413)).toMatchObject({ code: 'http_413_too_large' });
     expect(httpFailure(500).message).toContain('500');
     expect(httpFailure(401).message).toContain('Sign in');
+  });
+});
+
+describe('re-run keeps what the user checked', () => {
+  const row = (over: Partial<ReviewItem>): ReviewItem => ({ ...newReviewItem(), manual: false, ...over });
+
+  it('sends the edited list, empty fields as unknown', () => {
+    const text = userContent('печенье', '', [], [], [
+      checkedItem(row({ name: 'Протеиновое печенье', amount: 50, kcal: 210, p: 15, f: 9, c: 17 })),
+      checkedItem(newReviewItem())
+    ]);
+    expect(text).toContain('Checked list (rule 17):\n1. Протеиновое печенье · 50 g · 210 kcal, protein 15 g, fat 9 g, carbs 17 g\n2. unnamed · amount not given · nutrients not given');
+    expect(userContent('x', '', [], [])).not.toContain('Checked list');
+  });
+
+  it('ties each food to its checked row and ignores numbers out of range', () => {
+    const meal = buildMeal({ foods: [food({ checked_item: 2 }), food({ checked_item: 7 }), food({})], unmatched_package_image_ids: [], failure_reason: null }, [], 2);
+    expect(meal.foods.map(f => f.checked_index)).toEqual([1, null, null]);
+  });
+
+  it('keeps nutrients the user typed, rescaled to the new amount; the model fills the rest', () => {
+    const recognized = toReviewItem(buildMeal({ foods: [food({ name: 'Cream', amount_g: 60, amount_source: 'user_exact' })], unmatched_package_image_ids: [], failure_reason: null }, []).foods[0]);
+    const typed = row({ name: 'Cream', amount: 30, kcal: 90, p: '' as unknown as number, f: 9, c: '' as unknown as number, userSet: ['kcal', 'f'] });
+    const kept = keepUserNutrients(recognized, typed);
+    expect(kept).toMatchObject({ amount: 60, kcal: 180, f: 18, p: recognized.p, c: recognized.c, userSet: ['kcal', 'f'] });
+    expect(kept.hint).toMatch(/^Partly your numbers/);
+    expect(keepUserNutrients(recognized, undefined)).toBe(recognized);
   });
 });

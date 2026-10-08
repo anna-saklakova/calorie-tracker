@@ -105,6 +105,10 @@ export interface ReviewItem extends Item {
   amountNote?: string;
   /** per-gram values so editing the amount rescales the macros */
   per: Macros;
+  /** the nutrient fields the user typed in; a re-run keeps them */
+  userSet?: (keyof Macros)[];
+  /** added by hand on the Review screen */
+  manual?: boolean;
 }
 
 export type PhotoKind = 'plate' | 'label';
