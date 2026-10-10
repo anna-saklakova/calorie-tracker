@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight } from '../components/icons';
 import { NumInput, Segmented, SubHeader } from '../components/ui';
-import { convertMacroGoal, macroTargets } from '../lib/nutrition';
+import { convertMacroGoal, macroTargets, PROTEIN_PER_KG } from '../lib/nutrition';
 import { liveLibrary, updateSettings } from '../lib/store';
 import { syncLabel } from '../lib/sync';
 import type { SyncState } from '../lib/sync';
@@ -24,6 +24,9 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
   const hasGoal = s.goal > 0;
   const [goalText, setGoalText] = useState(s.goal ? String(s.goal) : '');
   const [minText, setMinText] = useState(s.min ? String(s.min) : '');
+  const [weightText, setWeightText] = useState(s.weight ? String(s.weight) : '');
+  // with a weight, protein is worked out from it and can't be typed in
+  const byWeight = (s.weight ?? 0) > 0;
   const minAboveGoal = hasGoal && (s.min ?? 0) > s.goal;
   // re-render every minute so "Synced · n min ago" stays current
   const [, tick] = useState(0);
@@ -34,7 +37,7 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
 
   const macroSum =
     s.macroMode === 'pct'
-      ? t.pctSum === 100 ? 'Adds up to 100%' : `Adds up to ${t.pctSum}%, should be 100`
+      ? t.pctSum === 100 ? 'Adds up to 100%' : byWeight && hasGoal ? `Protein ${t.pct.p}% from weight · fat + carbs should be ${100 - t.pct.p}%` : `Adds up to ${t.pctSum}%, should be 100`
       : `≈ ${t.gramsKcal} kcal` + (hasGoal ? ` · ${t.pct.p} / ${t.pct.f} / ${t.pct.c} %` : '');
 
   const user = sync.user;
@@ -91,6 +94,27 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
             </div>
           </div>
 
+          <div className="row row-sep">
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>Weight</div>
+              <div className="row-sub">{byWeight ? `Protein goal ${t.g.p} g · ${PROTEIN_PER_KG.target} g per kg` : `Sets protein at ${PROTEIN_PER_KG.target} g per kg`}</div>
+            </div>
+            <div className="input-wrap">
+              <NumInput
+                value={weightText}
+                ariaLabel="Body weight in kg"
+                placeholder="—"
+                onChange={v => {
+                  setWeightText(v);
+                  updateSettings({ weight: Math.max(0, Math.round((+v || 0) * 10) / 10) });
+                }}
+                className="num"
+                style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}
+              />
+              <span className="unit">kg</span>
+            </div>
+          </div>
+
           <div className="row-sep" style={{ padding: '14px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <div>
@@ -104,12 +128,18 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
                 <label key={k} className="field">
                   <span style={{ color }}>{label}</span>
                   <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', borderRadius: 10, height: 44, padding: '0 10px' }}>
-                    <NumInput
-                      value={s.macroGoal[k]}
-                      onChange={v => updateSettings({ macroGoal: { ...s.macroGoal, [k]: v === '' ? '' : +v } })}
-                      className="num"
-                      style={{ width: '100%', minWidth: 0, border: 'none', background: 'transparent', fontSize: 15, fontWeight: 600 }}
-                    />
+                    {k === 'p' && byWeight ? (
+                      <span className="num" style={{ width: '100%', minWidth: 0, fontSize: 15, fontWeight: 600, color: 'var(--muted)' }} title="From your weight">
+                        {s.macroMode === 'pct' ? (hasGoal ? t.pct.p : '—') : t.g.p}
+                      </span>
+                    ) : (
+                      <NumInput
+                        value={s.macroGoal[k]}
+                        onChange={v => updateSettings({ macroGoal: { ...s.macroGoal, [k]: v === '' ? '' : +v } })}
+                        className="num"
+                        style={{ width: '100%', minWidth: 0, border: 'none', background: 'transparent', fontSize: 15, fontWeight: 600 }}
+                      />
+                    )}
                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>{s.macroMode === 'pct' ? '%' : 'g'}</span>
                   </div>
                 </label>

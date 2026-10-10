@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { switchBasis } from '../../components/Sheet';
-import { goalsOn, KCAL_COLOR, kcalParts, kcalStatus, proteinPace, proteinStatus, proteinTag } from '../nutrition';
+import { goalsOn, KCAL_COLOR, kcalParts, kcalStatus, macroTargets, proteinGoal, proteinPace, proteinStatus, proteinTag } from '../nutrition';
+import type { Goals } from '../types';
 import { getData, setData, updateSettings } from '../store';
 import { emptyData } from '../types';
 import type { Product } from '../types';
@@ -46,21 +47,61 @@ describe('day status', () => {
     expect(kcalStatus(2201, 2000)).toBe('way_over');
   });
 
+  // a goal without a weight: the macro goal's grams, almost from 85 %
+  const g = (target: number) => ({ target, met: target, close: target * 0.85 });
+
   it('marks protein met by grams, close or short', () => {
-    expect(proteinStatus(150, 150, true)).toBe('met');
-    expect(proteinStatus(149.6, 150, true)).toBe('met');
-    expect(proteinStatus(149, 150, true)).toBe('close');
-    expect(proteinStatus(128, 150, true)).toBe('close');
-    expect(proteinStatus(127, 150, true)).toBe('short');
-    expect(proteinStatus(0, 150, false)).toBe('none');
-    expect(proteinStatus(50, 0, true)).toBe('none');
+    expect(proteinStatus(150, g(150), true)).toBe('met');
+    expect(proteinStatus(149.6, g(150), true)).toBe('met');
+    expect(proteinStatus(149, g(150), true)).toBe('close');
+    expect(proteinStatus(128, g(150), true)).toBe('close');
+    expect(proteinStatus(127, g(150), true)).toBe('short');
+    expect(proteinStatus(0, g(150), false)).toBe('none');
+    expect(proteinStatus(50, g(0), true)).toBe('none');
   });
 
   it('keeps the protein tag neutral while the day is still going', () => {
-    expect(proteinTag(80, 120, true, false)).toEqual({ tag: 'none', label: '40 g to go' });
-    expect(proteinTag(120, 120, true, false)).toEqual({ tag: 'on', label: 'Reached' });
-    expect(proteinTag(80, 120, true, true)).toEqual({ tag: 'off', label: 'Short' });
-    expect(proteinTag(110, 120, true, true)).toEqual({ tag: 'ok', label: 'Almost' });
+    expect(proteinTag(80, g(120), true, false)).toEqual({ tag: 'none', label: '40 g to go' });
+    expect(proteinTag(120, g(120), true, false)).toEqual({ tag: 'on', label: 'Reached' });
+    expect(proteinTag(80, g(120), true, true)).toEqual({ tag: 'off', label: 'Short' });
+    expect(proteinTag(110, g(120), true, true)).toEqual({ tag: 'ok', label: 'Almost' });
+  });
+});
+
+describe('protein from body weight', () => {
+  const goals = (weight: number, over: Partial<Goals> = {}): Goals => ({ goal: 2000, macroMode: 'pct', macroGoal: { p: 30, f: 30, c: 40 }, weight, ...over });
+
+  it('sets 1.6 g per kg, reached from 1.55, almost from 1.45, in whole grams', () => {
+    expect(proteinGoal(goals(70))).toEqual({ target: 112, met: 109, close: 102 });
+    expect(proteinGoal(goals(63))).toEqual({ target: 101, met: 98, close: 91 });
+  });
+
+  it('judges the day by those bands', () => {
+    const pg = proteinGoal(goals(70));
+    expect(proteinStatus(108.6, pg, true)).toBe('met'); // rounds to 109 = 1.55 g/kg
+    expect(proteinStatus(108, pg, true)).toBe('close');
+    expect(proteinStatus(102, pg, true)).toBe('close');
+    expect(proteinStatus(101, pg, true)).toBe('short');
+  });
+
+  it('falls back to the macro goal without a weight', () => {
+    expect(proteinGoal(goals(0)).target).toBe(150);
+  });
+
+  it('puts the weight-based protein into the macro targets', () => {
+    const pct = macroTargets(goals(70));
+    expect(pct.g.p).toBe(112);
+    expect(pct.pct.p).toBe(22); // 448 kcal of 2000
+    expect(pct.has).toBe(false); // 22 + 30 + 40
+    expect(macroTargets(goals(70, { macroGoal: { p: '', f: 30, c: 48 } })).has).toBe(true);
+    expect(macroTargets(goals(70, { macroMode: 'g', macroGoal: { p: 150, f: 70, c: 200 } })).g).toEqual({ p: 112, f: 70, c: 200 });
+  });
+
+  it('records the weight in the goal history', () => {
+    setData(emptyData());
+    updateSettings({ weight: 70 }, '2026-10-10');
+    expect(goalsOn(getData().settings, '2026-10-09').weight).toBe(0);
+    expect(goalsOn(getData().settings, '2026-10-10').weight).toBe(70);
   });
 });
 
@@ -103,7 +144,8 @@ describe('minimum calories', () => {
 });
 
 describe('protein pace', () => {
-  const pace = (p: number, kcal: number) => proteinPace(p, 120, kcal, 2000).status;
+  const pg = { target: 120, met: 120, close: 102 };
+  const pace = (p: number, kcal: number) => proteinPace(p, pg, kcal, 2000).status;
 
   it('judges by whether the missing grams still fit into the calories left', () => {
     expect(pace(50, 1000)).toBe('on'); // 70 g in 1000 kcal: 1.17× the day's density
@@ -123,8 +165,8 @@ describe('protein pace', () => {
 
   it('says nothing without a target or food, and reports the expected grams', () => {
     expect(pace(0, 0)).toBe('none');
-    expect(proteinPace(30, 0, 800, 2000).status).toBe('none');
-    expect(proteinPace(30, 120, 1000, 0).status).toBe('none');
-    expect(proteinPace(50, 120, 1000, 2000)).toMatchObject({ expected: 60, left: 70, eatenShare: 0.5 });
+    expect(proteinPace(30, { target: 0, met: 0, close: 0 }, 800, 2000).status).toBe('none');
+    expect(proteinPace(30, pg, 1000, 0).status).toBe('none');
+    expect(proteinPace(50, pg, 1000, 2000)).toMatchObject({ expected: 60, left: 70, eatenShare: 0.5 });
   });
 });

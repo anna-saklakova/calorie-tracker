@@ -2,8 +2,8 @@ import { useRef } from 'react';
 import { ChevronLeft, ChevronRight, SettingsIcon } from '../components/icons';
 import { DateStrip } from '../components/ui';
 import { dayLabel, shift } from '../lib/dates';
-import { amountLabel, dayTotals, fmt, goalsOn, kcalParts, macroTargets, mealLabels, PACE_LABEL, proteinPace } from '../lib/nutrition';
-import type { PaceStatus } from '../lib/nutrition';
+import { amountLabel, dayTotals, fmt, goalsOn, kcalParts, mealLabels, PACE_LABEL, proteinGoal, proteinPace } from '../lib/nutrition';
+import type { PaceStatus, ProteinGoal } from '../lib/nutrition';
 import type { Data, Item, Meal } from '../lib/types';
 
 interface Props {
@@ -57,8 +57,9 @@ const PACE_INK: Record<PaceStatus, string> = { none: 'var(--faint)', met: 'var(-
  * Today's protein against its target, coloured by whether it keeps up with the calories eaten so far.
  * The bar is the target; the fill is what's eaten; the tick is where the fill "should" be by now.
  */
-function ProteinPanel({ protein, target, kcal, goal }: { protein: number; target: number; kcal: number; goal: number }) {
-  const pace = proteinPace(protein, target, kcal, goal);
+function ProteinPanel({ protein, pg, kcal, goal }: { protein: number; pg: ProteinGoal; kcal: number; goal: number }) {
+  const pace = proteinPace(protein, pg, kcal, goal);
+  const target = pg.target;
   const fill = target > 0 ? Math.min(1, protein / target) : 0;
   const tick = pace.status === 'none' || pace.status === 'met' || goal <= 0 ? null : pace.eatenShare;
   // the numbers and the bar say it all; a note only when there is nothing to measure against
@@ -74,7 +75,7 @@ function ProteinPanel({ protein, target, kcal, goal }: { protein: number; target
           <span className="pace-val">{Math.round(protein)}</span>
           <span className="pace-unit">{target > 0 ? `of ${target} g` : 'g'}</span>
         </span>
-        {target > 0 && <span className="pace-left num">{pace.left > 0 ? `${Math.round(pace.left)} g to go` : 'done'}</span>}
+        {target > 0 && <span className="pace-left num">{pace.status !== 'met' && pace.left > 0 ? `${Math.round(pace.left)} g to go` : 'done'}</span>}
       </div>
       {target > 0 && (
         <div className="pace-track" role="progressbar" aria-valuemin={0} aria-valuemax={target} aria-valuenow={Math.round(Math.min(protein, target))}>
@@ -100,7 +101,6 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
   const RING = 2 * Math.PI * 36;
   const greenLen = (RING * parts.within) / ringScale;
   const overLen = (RING * parts.over) / ringScale;
-  const targets = macroTargets(s);
   const labels = mealLabels(meals);
 
   // the big number is what's left to the goal; the total goes underneath
@@ -176,7 +176,7 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
         </div>
 
         <div style={{ marginTop: 14 }}>
-          <ProteinPanel protein={tot.p} target={targets.g.p} kcal={tot.kcal} goal={s.goal} />
+          <ProteinPanel protein={tot.p} pg={proteinGoal(s)} kcal={tot.kcal} goal={s.goal} />
         </div>
 
         {!meals.length && (

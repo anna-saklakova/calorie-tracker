@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from '../components/icons';
 import { MacroCards } from '../components/ui';
 import type { MacroCardData } from '../components/ui';
 import { parse, shift, WD, weekLabel } from '../lib/dates';
-import { balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalParts, kcalStatus, MACRO_KEYS, macroPct, macroTargets, proteinStatus, proteinTag } from '../lib/nutrition';
+import { balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalParts, kcalStatus, MACRO_KEYS, macroPct, macroTargets, proteinGoal, proteinStatus, proteinTag } from '../lib/nutrition';
 import type { MacroKey, ProteinStatus } from '../lib/nutrition';
 import type { Data } from '../lib/types';
 
@@ -23,12 +23,12 @@ export function weekSummary(data: Data, weekStart: string, today: string) {
     .filter(d => d < today)
     .map(d => {
       const goals = goalsOn(data.settings, d);
-      return { t: dayTotals(data.days[d]), goals, protein: macroTargets(goals).g.p };
+      return { t: dayTotals(data.days[d]), goals, protein: proteinGoal(goals) };
     })
     .filter(x => x.t.kcal > 0);
   const n = days.length;
   const withGoal = days.filter(x => x.goals.goal > 0);
-  const withProtein = days.filter(x => x.protein > 0);
+  const withProtein = days.filter(x => x.protein.target > 0);
   return {
     days: n,
     kcal: n ? days.reduce((a, x) => a + x.t.kcal, 0) / n : 0,
@@ -100,7 +100,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
   // each day is judged against the goals it had; the summary uses the latest day shown
   const totals = days.map(d => {
     const goals = goalsOn(data.settings, d);
-    return { d, t: dayTotals(data.days[d]), goals, targets: macroTargets(goals) };
+    return { d, t: dayTotals(data.days[d]), goals, pg: proteinGoal(goals) };
   });
   const lastDay = days[6] <= today ? days[6] : today;
   const s = goalsOn(data.settings, lastDay);
@@ -117,11 +117,12 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
   const isCurrent = weekStart >= currentWeekStart;
 
   const targets = macroTargets(s);
+  const pg = proteinGoal(s);
   const actual = macroPct(avgM);
   const cards = Object.fromEntries(
     MACRO_KEYS.map(k => {
       // protein: the average grams against the goal in grams
-      const pt = k === 'p' && targets.g.p > 0 ? proteinTag(avgM.p, targets.g.p, actual.kcal > 0, true) : null;
+      const pt = k === 'p' && pg.target > 0 ? proteinTag(avgM.p, pg, actual.kcal > 0, true) : null;
       return [
         k,
         {
@@ -135,7 +136,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
       ];
     })
   ) as Record<MacroKey, MacroCardData>;
-  const showProtein = totals.some(x => x.targets.g.p > 0);
+  const showProtein = totals.some(x => x.pg.target > 0);
   const now = weekSummary(data, weekStart, today);
   const prev = weekSummary(data, shift(weekStart, -7), today);
 
@@ -231,10 +232,10 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, marginTop: 6 }}>
                 {totals.map(x => {
                   // today gets its tick once the goal is reached; short or not isn't known before the day is over
-                  const raw = x.d <= today ? proteinStatus(x.t.p, x.targets.g.p, x.t.kcal > 0) : 'none';
+                  const raw = x.d <= today ? proteinStatus(x.t.p, x.pg, x.t.kcal > 0) : 'none';
                   const st = x.d === today && raw !== 'met' ? 'none' : raw;
                   return (
-                    <span key={x.d} role={st === 'none' ? undefined : 'img'} aria-label={st === 'none' ? undefined : `${WD[parse(x.d).getDay()]}: ${PROTEIN_MARK[st][2]}, ${Math.round(x.t.p)} of ${x.targets.g.p} g`} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 22, color: 'var(--faint)', fontSize: 14 }}>
+                    <span key={x.d} role={st === 'none' ? undefined : 'img'} aria-label={st === 'none' ? undefined : `${WD[parse(x.d).getDay()]}: ${PROTEIN_MARK[st][2]}, ${Math.round(x.t.p)} of ${x.pg.target} g`} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 22, color: 'var(--faint)', fontSize: 14 }}>
                       {st === 'none' ? '·' : <ProteinMark status={st} />}
                     </span>
                   );
