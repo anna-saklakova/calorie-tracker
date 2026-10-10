@@ -83,7 +83,8 @@ function Compare({ now, prev, goal, isCurrent }: { now: Summary; prev: Summary; 
 const PROTEIN_MARK: Record<Exclude<ProteinStatus, 'none'>, [string, string, string]> = {
   met: ['✓', 'var(--accent)', 'protein reached'],
   close: ['~', 'var(--est)', 'protein almost reached'],
-  short: ['✕', 'var(--danger)', 'protein short']
+  short: ['✕', 'var(--danger)', 'protein short'],
+  critical: ['!', 'var(--ink)', 'protein critically low']
 };
 
 function ProteinMark({ status }: { status: Exclude<ProteinStatus, 'none'> }) {

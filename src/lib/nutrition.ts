@@ -60,7 +60,7 @@ export interface MacroTargets {
 }
 
 /** Protein per kg of body weight: the target, and where "reached" and "almost" start. */
-export const PROTEIN_PER_KG = { target: 1.6, met: 1.55, close: 1.45 } as const;
+export const PROTEIN_PER_KG = { target: 1.6, met: 1.55, close: 1.45, critical: 1.2 } as const;
 
 export interface ProteinGoal {
   /** target grams, 0 if unknown */
@@ -69,17 +69,23 @@ export interface ProteinGoal {
   met: number;
   /** grams from which it counts as almost */
   close: number;
+  /** below these grams the day is critical; 0 = no such level */
+  critical: number;
 }
 
 /**
  * The day's protein goal. With a body weight: 1.6 g per kg, reached from 1.55 g/kg, almost from 1.45 g/kg,
- * all rounded to whole grams. Without one: the macro goal's protein, reached at the target, almost from 85 %.
+ * critical below 1.2 g/kg, all rounded to whole grams. Without one: the macro goal's protein, reached at the
+ * target, almost from 85 %, no critical level.
  */
 export function proteinGoal(s: Goals): ProteinGoal {
   const w = +(s.weight ?? 0) || 0;
-  if (w > 0) return { target: Math.round(w * PROTEIN_PER_KG.target), met: Math.round(w * PROTEIN_PER_KG.met), close: Math.round(w * PROTEIN_PER_KG.close) };
+  if (w > 0) {
+    const g = (k: keyof typeof PROTEIN_PER_KG) => Math.round(w * PROTEIN_PER_KG[k]);
+    return { target: g('target'), met: g('met'), close: g('close'), critical: g('critical') };
+  }
   const target = macroGoalTargets(s).g.p;
-  return { target, met: target, close: target * 0.85 };
+  return { target, met: target, close: target * 0.85, critical: 0 };
 }
 
 /** The targets from the macro goal alone, protein included as entered. */
@@ -178,15 +184,15 @@ export function kcalParts(kcal: number, goal: number): { within: number; over: n
   return { within: goal, over: kcal - goal, overColor: KCAL_COLOR[status] };
 }
 
-export type ProteinStatus = 'none' | 'met' | 'close' | 'short';
+export type ProteinStatus = 'none' | 'met' | 'close' | 'short' | 'critical';
 /**
  * Protein judged by whole grams against the day's goal (proteinGoal): met from its `met` grams,
- * close from its `close` grams, otherwise short. 'none' without a target or food.
+ * close from its `close` grams, short down to its `critical` grams, critical below them. 'none' without a target or food.
  */
 export function proteinStatus(protein: number, goal: ProteinGoal, anyEaten: boolean): ProteinStatus {
   if (goal.target <= 0 || !anyEaten) return 'none';
   const g = Math.round(protein);
-  return g >= goal.met ? 'met' : g >= goal.close ? 'close' : 'short';
+  return g >= goal.met ? 'met' : g >= goal.close ? 'close' : g >= goal.critical ? 'short' : 'critical';
 }
 
 /**
@@ -198,7 +204,7 @@ export function proteinTag(protein: number, goal: ProteinGoal, anyEaten: boolean
   if (st === 'none') return { tag: 'none', label: TAG_LABEL.none };
   if (st === 'met') return { tag: 'on', label: 'Reached' };
   if (!dayDone) return { tag: 'none', label: `${fmt(goal.target - Math.round(protein))} g to go` };
-  return st === 'close' ? { tag: 'ok', label: 'Almost' } : { tag: 'off', label: 'Short' };
+  return st === 'close' ? { tag: 'ok', label: 'Almost' } : { tag: 'off', label: st === 'critical' ? 'Critical' : 'Short' };
 }
 
 // ── Meal names ──────────────────────────────────────────────
