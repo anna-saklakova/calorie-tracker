@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { ChevronRight } from '../components/icons';
 import { NumInput, Segmented, SubHeader } from '../components/ui';
-import { convertMacroGoal, macroTargets, PROTEIN_PER_KG } from '../lib/nutrition';
-import { liveLibrary, updateSettings } from '../lib/store';
+import { todayIso } from '../lib/dates';
+import { convertMacroGoal, fmt, macroTargets, PROTEIN_BMI_CAP, PROTEIN_PER_KG, proteinWeight } from '../lib/nutrition';
+import { liveLibrary, setWeighIn, updateSettings } from '../lib/store';
 import { syncLabel } from '../lib/sync';
 import type { SyncState } from '../lib/sync';
 import type { Data, Settings as S } from '../lib/types';
+import { maintenance, round50 } from '../lib/weight';
 
 interface Props {
   data: Data;
@@ -18,6 +20,8 @@ interface Props {
 
 const MACROS: ['p' | 'f' | 'c', string, string][] = [['p', 'Protein', 'var(--rose-ink)'], ['f', 'Fat', 'var(--peach-ink)'], ['c', 'Carbs', 'var(--accent-ink)']];
 
+const byWeightOf = (s: S) => (s.weight ?? 0) > 0;
+
 export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }: Props) {
   const s = data.settings;
   const t = macroTargets(s);
@@ -25,8 +29,12 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
   const [goalText, setGoalText] = useState(s.goal ? String(s.goal) : '');
   const [minText, setMinText] = useState(s.min ? String(s.min) : '');
   const [weightText, setWeightText] = useState(s.weight ? String(s.weight) : '');
+  const [heightText, setHeightText] = useState(s.height ? String(s.height) : '');
+  const pw = proteinWeight(s);
+  const capped = byWeightOf(s) && pw < (s.weight ?? 0);
+  const m = maintenance(data, todayIso());
   // with a weight, protein is worked out from it and can't be typed in
-  const byWeight = (s.weight ?? 0) > 0;
+  const byWeight = byWeightOf(s);
   const minAboveGoal = hasGoal && (s.min ?? 0) > s.goal;
   // re-render every minute so "Synced · n min ago" stays current
   const [, tick] = useState(0);
@@ -56,6 +64,7 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
             <div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>Daily goal</div>
               <div className="row-sub">From today on · past days keep theirs</div>
+              {m.status === 'ok' && <div className="row-sub">Maintenance ≈ {fmt(round50(m.kcal))} by your log</div>}
             </div>
             <div className="input-wrap">
               <NumInput
@@ -106,12 +115,36 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
                 placeholder="—"
                 onChange={v => {
                   setWeightText(v);
-                  updateSettings({ weight: Math.max(0, Math.round((+v || 0) * 10) / 10) });
+                  const kg = Math.max(0, Math.round((+v || 0) * 10) / 10);
+                  updateSettings({ weight: kg });
+                  // the weight is today's weigh-in too, so the trend on Week sees it
+                  setWeighIn(todayIso(), kg);
                 }}
                 className="num"
                 style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}
               />
               <span className="unit">kg</span>
+            </div>
+          </div>
+
+          <div className="row row-sep">
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>Height</div>
+              <div className="row-sub">{capped ? `Protein counted for ${pw} kg · BMI ${PROTEIN_BMI_CAP}` : `Protein counts weight up to BMI ${PROTEIN_BMI_CAP}`}</div>
+            </div>
+            <div className="input-wrap">
+              <NumInput
+                value={heightText}
+                ariaLabel="Height in cm"
+                placeholder="—"
+                onChange={v => {
+                  setHeightText(v);
+                  updateSettings({ height: Math.max(0, Math.round(+v || 0)) });
+                }}
+                className="num"
+                style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}
+              />
+              <span className="unit">cm</span>
             </div>
           </div>
 

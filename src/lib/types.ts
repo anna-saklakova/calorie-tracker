@@ -31,6 +31,8 @@ export interface Meal {
 
 export interface Day {
   meals: Meal[];
+  /** the weigh-in on this day, kg; missing = none */
+  weight?: number;
   updatedAt: number;
 }
 
@@ -59,6 +61,8 @@ export interface Goals {
   macroGoal: { p: number | ''; f: number | ''; c: number | '' };
   /** body weight in kg; when set, the protein target is worked out from it (see proteinGoal) */
   weight?: number;
+  /** height in cm; when set, protein is worked out from at most the weight at BMI 27.5 (see proteinWeight) */
+  height?: number;
 }
 
 /** The goals in force from `from` (YYYY-MM-DD) until the next snapshot. */

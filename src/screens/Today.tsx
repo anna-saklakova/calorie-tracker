@@ -1,10 +1,12 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, SettingsIcon } from '../components/icons';
-import { DateStrip } from '../components/ui';
+import { DateStrip, NumInput } from '../components/ui';
 import { dayLabel, shift } from '../lib/dates';
 import { amountLabel, dayTotals, fmt, goalsOn, kcalParts, mealLabels, PACE_LABEL, proteinGoal, proteinPace } from '../lib/nutrition';
 import type { PaceStatus, ProteinGoal } from '../lib/nutrition';
+import { setWeighIn, updateSettings } from '../lib/store';
 import type { Data, Item, Meal } from '../lib/types';
+import { daysSinceWeighIn, WEIGH_EVERY, weighIns } from '../lib/weight';
 
 interface Props {
   data: Data;
@@ -88,6 +90,43 @@ function ProteinPanel({ protein, pg, kcal, goal }: { protein: number; pg: Protei
   );
 }
 
+/**
+ * The weekly weigh-in. Shown on a day that has one, and on today when the last one is a week old or
+ * there is none. The latest weigh-in is also the weight protein is worked out from.
+ */
+function WeighInRow({ data, date }: { data: Data; date: string }) {
+  const [text, setText] = useState(data.days[date]?.weight ? String(data.days[date]!.weight) : '');
+  const before = weighIns(data, date).filter(w => w.date < date).pop();
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <div className="row" style={{ cursor: 'default' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>Weigh-in</div>
+          <div className="row-sub">{before ? `Last ${before.kg.toFixed(1)} kg · same day and conditions` : 'Once a week · morning, before eating'}</div>
+        </div>
+        <div className="input-wrap">
+          <NumInput
+            value={text}
+            ariaLabel="Weight in kg"
+            placeholder="—"
+            onChange={v => {
+              setText(v);
+              const kg = Math.max(0, Math.round((+v || 0) * 10) / 10);
+              setWeighIn(date, kg);
+              // the latest weigh-in sets the weight for the protein goal
+              const later = weighIns(data).some(w => w.date > date);
+              if (kg > 0 && !later) updateSettings({ weight: kg });
+            }}
+            className="num"
+            style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}
+          />
+          <span className="unit">kg</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Today({ data, date, today, datePick, setDate, toggleDatePick, openSettings, openItem, deleteItem }: Props) {
   // the goals that applied on this day (goal changes don't rewrite the past)
   const s = goalsOn(data.settings, date);
@@ -102,6 +141,8 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
   const greenLen = (RING * parts.within) / ringScale;
   const overLen = (RING * parts.over) / ringScale;
   const labels = mealLabels(meals);
+  const since = daysSinceWeighIn(data, today);
+  const showWeighIn = (day?.weight ?? 0) > 0 || (date === today && (since === null || since >= WEIGH_EVERY));
 
   // the big number is what's left to the goal; the total goes underneath
   const left = s.goal - tot.kcal;
@@ -178,6 +219,7 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
         <div style={{ marginTop: 14 }}>
           <ProteinPanel protein={tot.p} pg={proteinGoal(s)} kcal={tot.kcal} goal={s.goal} />
         </div>
+        {showWeighIn && <WeighInRow key={date} data={data} date={date} />}
 
         {!meals.length && (
           <div style={{ marginTop: 72, textAlign: 'center', padding: '0 24px' }}>
