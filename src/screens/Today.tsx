@@ -139,7 +139,10 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
   const overLen = (RING * parts.over) / ringScale;
   const labels = mealLabels(meals);
   const since = daysSinceWeighIn(data, today);
-  const showWeighIn = (day?.weight ?? 0) > 0 || (date === today && (since === null || since >= WEIGH_EVERY));
+  const due = date === today && (since === null || since >= WEIGH_EVERY);
+  // a weigh-in that was missed can be added on its own day later, or today ahead of time
+  const [weighOpenOn, setWeighOpenOn] = useState<string | null>(null);
+  const showWeighIn = (day?.weight ?? 0) > 0 || due || weighOpenOn === date;
 
   // the big number is what's left to the goal; the total goes underneath
   const left = s.goal - tot.kcal;
@@ -216,7 +219,17 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
         <div style={{ marginTop: 14 }}>
           <ProteinPanel protein={tot.p} pg={proteinGoal(s)} kcal={tot.kcal} goal={s.goal} />
         </div>
-        {showWeighIn && <WeighInRow key={date} data={data} date={date} />}
+        {showWeighIn ? (
+          <WeighInRow key={date} data={data} date={date} />
+        ) : (
+          date <= today && (
+            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="pill-btn" onClick={() => setWeighOpenOn(date)}>
+                + Weigh-in
+              </button>
+            </div>
+          )
+        )}
 
         {!meals.length && (
           <div style={{ marginTop: 72, textAlign: 'center', padding: '0 24px' }}>

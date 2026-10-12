@@ -126,7 +126,7 @@ function WeightCard({ data, upTo, goal }: { data: Data; upTo: string; goal: numb
           </div>
         ))}
       </div>
-      {!last && <div className="secondary" style={{ fontSize: 13, marginTop: 8, padding: '0 4px' }}>Weigh in once a week on Today: same day, in the morning, before eating.</div>}
+      {!last && <div className="secondary" style={{ fontSize: 13, marginTop: 8, padding: '0 4px' }}>Weigh in once a week on Today: same day, in the morning, before eating. A missed one can be added on its day.</div>}
     </section>
   );
 }
