@@ -62,6 +62,20 @@ export interface MacroTargets {
 /** Protein per kg of body weight: the target, and where "reached" and "almost" start. */
 export const PROTEIN_PER_KG = { target: 1.6, met: 1.55, close: 1.45, critical: 1.2 } as const;
 
+/**
+ * Protein need follows lean mass, not fat, so above this BMI the weight used for protein is capped
+ * at the weight this BMI gives for the height (the adjusted body weight used in clinical practice).
+ */
+export const PROTEIN_BMI_CAP = 27.5;
+
+/** The weight protein is worked out from, kg: the body weight, capped at BMI 27.5 when the height is known. 0 = none. */
+export function proteinWeight(s: Pick<Goals, 'weight' | 'height'>): number {
+  const w = +(s.weight ?? 0) || 0;
+  const h = +(s.height ?? 0) || 0;
+  if (!(w > 0) || !(h > 0)) return Math.max(0, w);
+  return Math.min(w, Math.round(PROTEIN_BMI_CAP * (h / 100) ** 2 * 10) / 10);
+}
+
 export interface ProteinGoal {
   /** target grams, 0 if unknown */
   target: number;
@@ -74,12 +88,12 @@ export interface ProteinGoal {
 }
 
 /**
- * The day's protein goal. With a body weight: 1.6 g per kg, reached from 1.55 g/kg, almost from 1.45 g/kg,
+ * The day's protein goal. With a body weight: 1.6 g per kg (of proteinWeight), reached from 1.55 g/kg, almost from 1.45 g/kg,
  * critical below 1.2 g/kg, all rounded to whole grams. Without one: the macro goal's protein, reached at the
  * target, almost from 85 %, no critical level.
  */
 export function proteinGoal(s: Goals): ProteinGoal {
-  const w = +(s.weight ?? 0) || 0;
+  const w = proteinWeight(s);
   if (w > 0) {
     const g = (k: keyof typeof PROTEIN_PER_KG) => Math.round(w * PROTEIN_PER_KG[k]);
     return { target: g('target'), met: g('met'), close: g('close'), critical: g('critical') };

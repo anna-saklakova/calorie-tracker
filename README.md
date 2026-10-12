@@ -42,6 +42,19 @@ The model gets up to 110 s (the function 120 s, the app waits 130 s); the Analyz
 - Today has one protein panel instead of three macro cards. It compares the protein eaten with the calories eaten: the missing grams must still fit into the calories left. Green when the rest of the day needs no more protein per kcal than the day's average (up to 1.2×), yellow up to 1.6× (protein-rich meals will catch up), red above that. The tick on the bar is where the protein "should" be by now. Reached and almost follow the same rule as the weekly marks, so from "almost" the panel is never worse than yellow (`src/lib/nutrition.ts`, `proteinPace`).
 - **Protein from body weight.** Settings asks for the weight; the protein goal is then 1.6 g per kg, rounded to whole grams, and the protein field of the macro goal is locked (in % mode it shows the share those grams make of the calorie goal; fat and carbs fill the rest). A day counts as reached from 1.55 g/kg, almost from 1.45 g/kg, short down to 1.2 g/kg and critical below that (black ! on Week) (`proteinGoal`). The weight is part of the goal history, so past days keep the weight they had. Without a weight, protein comes from the macro goal as before: reached at the target, almost from 85 %.
 - Week keeps the three macro cards (averages) and marks each day's protein with a filled ✓ / ~ / ✕ circle, or a black ! when it was critical.
+- **Height** (Settings) caps the weight protein is worked out from at BMI 27.5: protein need follows lean mass, so above that the adjusted weight is used (`proteinWeight`).
+
+### Week: how the numbers are counted
+
+Based on the evidence summarised below (`src/lib/stats.ts`, `src/lib/weight.ts`).
+
+- **Calories add up over days**, so the week is the arithmetic mean of the finished, logged days, plus their sum against the goals of the same days ("7 of 7 days logged · 15 340 of 14 700 kcal"). Not the median: it would hide the days over. Days without a log are left out; with more than one such day the line turns yellow, since the average may be off.
+- **Protein can't be carried over to another day** (there is no store for amino acids; extra is burned), so the protein card is judged by days, not by the average: "5 of 7 days", green when every day was reached, yellow when every day was at least almost, red otherwise. Under the cards: the lowest day, in g/kg.
+- **Weight once a week.** On Today a Weigh-in row appears when the last weigh-in is 7 days old or more (and on any day that has one). Same day of the week, morning, before eating. The latest weigh-in also becomes the weight for the protein goal; a weight typed in Settings is today's weigh-in. Weigh-ins are stored on the day (`Day.weight`).
+- **Trend**: a least-squares line through the weigh-ins of the last 6 weeks (at least 3, at least 2 weeks apart), in kg a week; not the difference between two weigh-ins, which are noisy.
+- **Maintenance by your log**: average logged intake between the first and last weigh-in minus the weight change × 7 700 kcal/kg, with a ± range from the trend's uncertainty. Only with at least 4 weigh-ins over 4 weeks and food logged on 6 of 7 days in between. It compares the log with the scale, so it also absorbs what the log misses. Shown on Week (with what the current goal means in kg a week) and under the daily goal in Settings; the goal itself is never changed automatically.
+
+Sources: Morton 2018 (BJSM, protein plateau ≈ 1.6 g/kg); Trommelen 2023 (Cell Rep Med, a large protein dose within a day is used); Areta 2013 and Schoenfeld & Aragon 2018 (distribution is second order); meta-analyses of intermittent vs continuous energy restriction (Cioffi 2018 and others: same weight loss); weekly vs daily self-weighing (meta-analysis 2015: no difference); Orsama 2014 (weekly weight rhythm); Hall 2008 and Hall's energy-balance work (7 700 kcal/kg is rough, estimates need ≥ 4 weeks); doubly labelled water reviews (self-reported intake is under-reported); protein in obesity (adjusted body weight).
 
 ## Supabase setup
 
@@ -76,6 +89,8 @@ src/
     remote.ts          database calls (rows, save_records)
     merge.ts           per-record conflict rules (newer wins), unsaved-record tracking
     supabase.ts        client and auth (password, Google, reset)
+    stats.ts           the week's numbers: coverage, sum against the goals, protein by days
+    weight.ts          weigh-ins, weight trend, maintenance by the log
     nutrition.ts       totals, macro % of calories, goal tags (protein may go over, fat and carbs may stay under; On track ≤3 pts the wrong way, Acceptable ≤8, else Off balance), day status with the minimum, protein pace
     recognize.ts       calls /api/recognize, maps the result to Review rows
     ai/                shared with the server: schema, prompts, web lookup, nutrient maths

@@ -1,10 +1,13 @@
 import { ChevronLeft, ChevronRight } from '../components/icons';
 import { MacroCards } from '../components/ui';
 import type { MacroCardData } from '../components/ui';
-import { parse, shift, WD, weekLabel } from '../lib/dates';
-import { balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalParts, kcalStatus, MACRO_KEYS, macroPct, macroTargets, proteinGoal, proteinStatus, proteinTag } from '../lib/nutrition';
-import type { MacroKey, ProteinStatus } from '../lib/nutrition';
+import { MON, parse, shift, WD, weekLabel } from '../lib/dates';
+import { balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalParts, kcalStatus, MACRO_KEYS, macroPct, macroTargets, proteinGoal, proteinStatus } from '../lib/nutrition';
+import type { BalanceTag, MacroKey, ProteinStatus } from '../lib/nutrition';
+import { weekStats } from '../lib/stats';
+import type { WeekStats } from '../lib/stats';
 import type { Data } from '../lib/types';
+import { KCAL_PER_KG, maintenance, round50, weighIns, weightTrend } from '../lib/weight';
 
 interface Props {
   data: Data;
@@ -17,31 +20,7 @@ interface Props {
 
 const H = 120;
 
-/** A finished week's main numbers, for comparing with the week before. Today is left out until it's over. */
-export function weekSummary(data: Data, weekStart: string, today: string) {
-  const days = Array.from({ length: 7 }, (_, i) => shift(weekStart, i))
-    .filter(d => d < today)
-    .map(d => {
-      const goals = goalsOn(data.settings, d);
-      return { t: dayTotals(data.days[d]), goals, protein: proteinGoal(goals) };
-    })
-    .filter(x => x.t.kcal > 0);
-  const n = days.length;
-  const withGoal = days.filter(x => x.goals.goal > 0);
-  const withProtein = days.filter(x => x.protein.target > 0);
-  return {
-    days: n,
-    kcal: n ? days.reduce((a, x) => a + x.t.kcal, 0) / n : 0,
-    protein: n ? days.reduce((a, x) => a + x.t.p, 0) / n : 0,
-    /** days that ended within the calorie goal (and not under the minimum), of the days that had a goal */
-    onGoal: withGoal.filter(x => kcalStatus(x.t.kcal, x.goals.goal, x.goals.min ?? 0) === 'within').length,
-    goalDays: withGoal.length,
-    /** days the protein target was reached, of the days that had one */
-    proteinMet: withProtein.filter(x => proteinStatus(x.t.p, x.protein, true) === 'met').length,
-    proteinDays: withProtein.length
-  };
-}
-type Summary = ReturnType<typeof weekSummary>;
+type Summary = WeekStats;
 
 const GOOD = 'var(--accent-ink)';
 const BAD = 'var(--danger)';
@@ -56,6 +35,7 @@ function Compare({ now, prev, goal, isCurrent }: { now: Summary; prev: Summary; 
     { label: 'Average', value: `${fmt(now.kcal)} kcal`, change: `${arrow(Math.round(now.kcal - prev.kcal))} ${fmt(Math.abs(now.kcal - prev.kcal))}`, color: kcalTone, before: fmt(prev.kcal) },
     { label: 'Protein', value: `${Math.round(now.protein)} g`, change: `${arrow(Math.round(now.protein - prev.protein))} ${Math.abs(Math.round(now.protein - prev.protein))} g`, color: tone(Math.round(now.protein - prev.protein)), before: `${Math.round(prev.protein)} g` }
   ];
+  rows.push({ label: 'Days logged', value: `${now.days} of ${now.past}`, change: '', color: tone(now.days / now.past - prev.days / prev.past), before: `${prev.days} of ${prev.past}` });
   if (now.goalDays && prev.goalDays) rows.push({ label: 'On calorie goal', value: `${now.onGoal} of ${now.goalDays} days`, change: '', color: tone(now.onGoal / now.goalDays - prev.onGoal / prev.goalDays), before: `${prev.onGoal} of ${prev.goalDays}` });
   if (now.proteinDays && prev.proteinDays) rows.push({ label: 'Protein reached', value: `${now.proteinMet} of ${now.proteinDays} days`, change: '', color: tone(now.proteinMet / now.proteinDays - prev.proteinMet / prev.proteinDays), before: `${prev.proteinMet} of ${prev.proteinDays}` });
   return (
@@ -96,6 +76,62 @@ function ProteinMark({ status }: { status: Exclude<ProteinStatus, 'none'> }) {
   );
 }
 
+/** The week's protein verdict: every day reached is on track, every day at least almost is acceptable. */
+function proteinWeekTag(w: WeekStats): { tag: BalanceTag; label: string } {
+  const label = `${w.proteinMet} of ${w.proteinDays} days`;
+  if (w.proteinMet === w.proteinDays) return { tag: 'on', label };
+  return { tag: w.proteinMet + w.proteinClose === w.proteinDays ? 'ok' : 'off', label };
+}
+
+const shortDate = (d: string) => `${WD[parse(d).getDay()]} ${parse(d).getDate()} ${MON[parse(d).getMonth()]}`;
+const signed = (n: number, digits = 1) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(digits)}`;
+
+/** Weekly weigh-ins: the latest, the trend, and the calories that keep the weight steady by the user's log. */
+function WeightCard({ data, upTo, goal }: { data: Data; upTo: string; goal: number }) {
+  const all = weighIns(data, upTo);
+  const last = all[all.length - 1];
+  const trend = weightTrend(data, upTo);
+  const m = maintenance(data, upTo);
+  const rows: { label: string; sub: string; value: string }[] = [];
+  if (last) rows.push({ label: 'Last weigh-in', sub: shortDate(last.date), value: `${last.kg.toFixed(1)} kg` });
+  rows.push(
+    trend
+      ? { label: 'Trend', sub: `${trend.n} weigh-ins over ${Math.round(trend.span / 7)} weeks`, value: `${signed(trend.perWeek, 2)} kg a week` }
+      : { label: 'Trend', sub: 'After 3 weigh-ins over 2 weeks', value: '—' }
+  );
+  if (m.status === 'ok') {
+    const atGoal = goal > 0 ? ((goal - m.kcal) * 7) / KCAL_PER_KG : null;
+    rows.push({
+      label: 'Maintenance by your log',
+      sub: `± ${fmt(round50(m.range))} kcal${atGoal !== null ? ` · at your goal ${signed(atGoal, 2)} kg a week` : ''}`,
+      value: `≈ ${fmt(round50(m.kcal))} kcal`
+    });
+  } else {
+    rows.push({
+      label: 'Maintenance by your log',
+      sub: m.status === 'weigh_ins' ? `After 4 weigh-ins over 4 weeks · ${m.have} so far` : `Needs food logged 6 of 7 days · ${m.logged} of ${m.days}`,
+      value: '—'
+    });
+  }
+  return (
+    <section style={{ marginTop: 28 }}>
+      <div className="label" style={{ padding: '0 4px 10px' }}>Weight</div>
+      <div className="card">
+        {rows.map(r => (
+          <div key={r.label} className="row" style={{ cursor: 'default' }}>
+            <div style={{ minWidth: 0 }}>
+              <div className="row-name">{r.label}</div>
+              <div className="row-sub">{r.sub}</div>
+            </div>
+            <div className="num" style={{ fontSize: 16, fontWeight: 600, textAlign: 'right', flex: 'none' }}>{r.value}</div>
+          </div>
+        ))}
+      </div>
+      {!last && <div className="secondary" style={{ fontSize: 13, marginTop: 8, padding: '0 4px' }}>Weigh in once a week on Today: same day, in the morning, before eating.</div>}
+    </section>
+  );
+}
+
 export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, openDay }: Props) {
   const days = Array.from({ length: 7 }, (_, i) => shift(weekStart, i));
   // each day is judged against the goals it had; the summary uses the latest day shown
@@ -118,12 +154,14 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
   const isCurrent = weekStart >= currentWeekStart;
 
   const targets = macroTargets(s);
-  const pg = proteinGoal(s);
   const actual = macroPct(avgM);
+  const now = weekStats(data, weekStart, today);
+  const prev = weekStats(data, shift(weekStart, -7), today);
+  // protein can't be made up on another day, so the card is judged by days, not by the average
+  const proteinVerdict = now.proteinDays ? proteinWeekTag(now) : null;
   const cards = Object.fromEntries(
     MACRO_KEYS.map(k => {
-      // protein: the average grams against the goal in grams
-      const pt = k === 'p' && pg.target > 0 ? proteinTag(avgM.p, pg, actual.kcal > 0, true) : null;
+      const pt = k === 'p' ? proteinVerdict : null;
       return [
         k,
         {
@@ -138,8 +176,6 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
     })
   ) as Record<MacroKey, MacroCardData>;
   const showProtein = totals.some(x => x.pg.target > 0);
-  const now = weekSummary(data, weekStart, today);
-  const prev = weekSummary(data, shift(weekStart, -7), today);
 
   return (
     <div className="screen fade">
@@ -167,12 +203,24 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
             <span className="hero-unit">kcal</span>
           </div>
           <div className="secondary" style={{ marginTop: 8 }}>
-            {logged.length ? `${logged.length} ${logged.length === 1 ? 'day' : 'days'} logged` : todayPending ? 'Today counts once it’s over' : 'No meals logged this week'}
+            {logged.length ? (
+              <>
+                <span style={{ color: now.complete ? undefined : 'var(--est)' }}>{`${now.days} of ${now.past} ${now.past === 1 ? 'day' : 'days'} logged`}</span>
+                {now.budget > 0 && ` · ${fmt(now.kcalSum)} of ${fmt(now.budget)} kcal`}
+              </>
+            ) : todayPending ? 'Today counts once it’s over' : 'No meals logged this week'}
           </div>
+          {logged.length > 0 && !now.complete && <div style={{ fontSize: 12, color: 'var(--est)', marginTop: 4 }}>Days without a log are left out, so the average may be off</div>}
         </div>
         <div style={{ marginTop: 14 }}>
-          <MacroCards data={cards} showTags={targets.has} />
+          <MacroCards data={cards} showTags={targets.has || !!proteinVerdict} />
         </div>
+        {now.proteinLowest && (
+          <div className="secondary" style={{ fontSize: 13, marginTop: 10 }}>
+            Protein reached {now.proteinMet} of {now.proteinDays} {now.proteinDays === 1 ? 'day' : 'days'} · lowest{' '}
+            {now.proteinLowest.perKg > 0 ? `${now.proteinLowest.perKg.toFixed(1)} g/kg` : `${Math.round(now.proteinLowest.g)} g (${Math.round(now.proteinLowest.share * 100)}%)`}
+          </div>
+        )}
 
         <div style={{ marginTop: 28, background: '#fff', borderRadius: 20, padding: '20px 16px 14px', position: 'relative' }}>
           {hasGoal && (
@@ -245,6 +293,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
             </>
           )}
         </div>
+        <WeightCard data={data} upTo={lastDay} goal={s.goal} />
         {now.days > 0 && prev.days > 0 && <Compare now={now} prev={prev} goal={s.goal} isCurrent={isCurrent} />}
       </div>
     </div>
