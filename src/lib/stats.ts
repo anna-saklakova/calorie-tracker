@@ -1,14 +1,14 @@
 import { shift } from './dates';
 import { dayTotals, goalsOn, kcalStatus, proteinGoal, proteinStatus } from './nutrition';
-import type { ProteinStatus } from './nutrition';
+import type { BalanceTag, ProteinStatus } from './nutrition';
 import type { Data } from './types';
 
 /**
  * A week's numbers, of the finished days only (today counts once it's over).
  *
  * Calories add up over days (energy balance is cumulative), so the week is judged by its arithmetic
- * mean and its sum against the goals of the same days. Protein has no store to draw on later, so it's
- * judged day by day: how many days reached it, and the lowest day.
+ * mean and its sum against the goals of the same days. Protein is judged by days (the 80 / 20 rule,
+ * see proteinWeekTag): how many fell below the almost level, and the lowest day.
  */
 export function weekStats(data: Data, weekStart: string, today: string) {
   const past = Array.from({ length: 7 }, (_, i) => shift(weekStart, i)).filter(d => d < today);
@@ -46,8 +46,23 @@ export function weekStats(data: Data, weekStart: string, today: string) {
     /** days the protein target was reached, of the days that had one */
     proteinMet: count('met'),
     proteinClose: count('close'),
+    /** days below the almost level */
+    proteinShort: count('short'),
     proteinDays: withProtein.length,
     proteinLowest: lowest ? { g: lowest.t.p, share: lowest.t.p / lowest.pg.target, status: proteinStatus(lowest.t.p, lowest.pg, true) } : null
   };
 }
 export type WeekStats = ReturnType<typeof weekStats>;
+
+/** Days below the almost level a week can have and still be on track, or acceptable. */
+export const PROTEIN_LOW_DAYS = { on: 1, ok: 2 } as const;
+
+/**
+ * The week's protein verdict, by the 80 / 20 rule: what counts is how often protein fell below the
+ * almost level, not whether every day was reached. At most one such day is on track, two are
+ * acceptable as a rare exception, more is off balance. The label counts the days at least almost.
+ */
+export function proteinWeekTag(w: Pick<WeekStats, 'proteinMet' | 'proteinClose' | 'proteinShort' | 'proteinDays'>): { tag: BalanceTag; label: string } {
+  const label = `${w.proteinMet + w.proteinClose} of ${w.proteinDays} days`;
+  return { tag: w.proteinShort <= PROTEIN_LOW_DAYS.on ? 'on' : w.proteinShort <= PROTEIN_LOW_DAYS.ok ? 'ok' : 'off', label };
+}

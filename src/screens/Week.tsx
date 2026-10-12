@@ -3,8 +3,8 @@ import { MacroCards } from '../components/ui';
 import type { MacroCardData } from '../components/ui';
 import { MON, parse, shift, WD, weekLabel } from '../lib/dates';
 import { balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalParts, kcalStatus, MACRO_KEYS, macroPct, macroTargets, proteinGoal, proteinStatus } from '../lib/nutrition';
-import type { BalanceTag, MacroKey, ProteinStatus } from '../lib/nutrition';
-import { weekStats } from '../lib/stats';
+import type { MacroKey, ProteinStatus } from '../lib/nutrition';
+import { proteinWeekTag, weekStats } from '../lib/stats';
 import type { WeekStats } from '../lib/stats';
 import type { Data } from '../lib/types';
 import { KCAL_PER_KG, maintenance, round50, weighIns, weightTrend } from '../lib/weight';
@@ -37,7 +37,8 @@ function Compare({ now, prev, goal, isCurrent }: { now: Summary; prev: Summary; 
   ];
   rows.push({ label: 'Days logged', value: `${now.days} of ${now.past}`, change: '', color: tone(now.days / now.past - prev.days / prev.past), before: `${prev.days} of ${prev.past}` });
   if (now.goalDays && prev.goalDays) rows.push({ label: 'On calorie goal', value: `${now.onGoal} of ${now.goalDays} days`, change: '', color: tone(now.onGoal / now.goalDays - prev.onGoal / prev.goalDays), before: `${prev.onGoal} of ${prev.goalDays}` });
-  if (now.proteinDays && prev.proteinDays) rows.push({ label: 'Protein reached', value: `${now.proteinMet} of ${now.proteinDays} days`, change: '', color: tone(now.proteinMet / now.proteinDays - prev.proteinMet / prev.proteinDays), before: `${prev.proteinMet} of ${prev.proteinDays}` });
+  const okDays = (w: Summary) => w.proteinMet + w.proteinClose;
+  if (now.proteinDays && prev.proteinDays) rows.push({ label: 'Protein reached or almost', value: `${okDays(now)} of ${now.proteinDays} days`, change: '', color: tone(okDays(now) / now.proteinDays - okDays(prev) / prev.proteinDays), before: `${okDays(prev)} of ${prev.proteinDays}` });
   return (
     <section style={{ marginTop: 28 }}>
       <div className="label" style={{ padding: '0 4px 10px' }}>{isCurrent ? 'Compared with last week' : 'Compared with the week before'}</div>
@@ -73,13 +74,6 @@ function ProteinMark({ status }: { status: Exclude<ProteinStatus, 'none'> }) {
       {glyph}
     </span>
   );
-}
-
-/** The week's protein verdict: every day reached is on track, every day at least almost is acceptable. */
-function proteinWeekTag(w: WeekStats): { tag: BalanceTag; label: string } {
-  const label = `${w.proteinMet} of ${w.proteinDays} days`;
-  if (w.proteinMet === w.proteinDays) return { tag: 'on', label };
-  return { tag: w.proteinMet + w.proteinClose === w.proteinDays ? 'ok' : 'off', label };
 }
 
 const shortDate = (d: string) => `${WD[parse(d).getDay()]} ${parse(d).getDate()} ${MON[parse(d).getMonth()]}`;
@@ -156,7 +150,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
   const actual = macroPct(avgM);
   const now = weekStats(data, weekStart, today);
   const prev = weekStats(data, shift(weekStart, -7), today);
-  // protein can't be made up on another day, so the card is judged by days, not by the average
+  // protein is judged by days below the almost level (80 / 20), not by the average
   const proteinVerdict = now.proteinDays ? proteinWeekTag(now) : null;
   const cards = Object.fromEntries(
     MACRO_KEYS.map(k => {
@@ -216,8 +210,8 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
         </div>
         {now.proteinLowest && (
           <div className="secondary" style={{ fontSize: 13, marginTop: 10 }}>
-            Protein reached {now.proteinMet} of {now.proteinDays} {now.proteinDays === 1 ? 'day' : 'days'} · lowest{' '}
-            {Math.round(now.proteinLowest.g)} g ({Math.round(now.proteinLowest.share * 100)}%)
+            Protein: {now.proteinMet} reached · {now.proteinClose} almost · {now.proteinShort} low {now.proteinShort === 1 ? 'day' : 'days'} · lowest{' '}
+            {Math.round(now.proteinLowest.g)} g
           </div>
         )}
 
