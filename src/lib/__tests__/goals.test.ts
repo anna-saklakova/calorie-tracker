@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { switchBasis } from '../../components/Sheet';
-import { goalsOn, KCAL_COLOR, kcalParts, kcalStatus, macroTargets, proteinGoal, proteinPace, proteinStatus, proteinTag } from '../nutrition';
+import { goalsOn, KCAL_COLOR, kcalParts, kcalStatus, kcalZone, macroTargets, proteinGoal, proteinPace, proteinStatus, proteinTag } from '../nutrition';
 import type { Goals } from '../types';
 import { getData, setData, updateSettings } from '../store';
 import { emptyData } from '../types';
@@ -39,12 +39,28 @@ describe('goal history', () => {
 });
 
 describe('day status', () => {
-  it('colours calories within, up to 10 % over and more', () => {
+  it('colours calories within 10 % over, up to 20 % over and more', () => {
     expect(kcalStatus(0, 2000)).toBe('none');
     expect(kcalStatus(1500, 0)).toBe('none');
     expect(kcalStatus(2000, 2000)).toBe('within');
-    expect(kcalStatus(2200, 2000)).toBe('over');
-    expect(kcalStatus(2201, 2000)).toBe('way_over');
+    expect(kcalStatus(2200, 2000)).toBe('within');
+    expect(kcalStatus(2201, 2000)).toBe('over');
+    expect(kcalStatus(2400, 2000)).toBe('over');
+    expect(kcalStatus(2401, 2000)).toBe('way_over');
+  });
+
+  it('puts a day into a calorie zone around its goal', () => {
+    // goal 1900: ideal 1710–2090, fine 1520–2280
+    expect(kcalZone(1710, 1900)).toBe('ideal');
+    expect(kcalZone(2090, 1900)).toBe('ideal');
+    expect(kcalZone(1709, 1900)).toBe('low');
+    expect(kcalZone(1520, 1900)).toBe('low');
+    expect(kcalZone(1519, 1900)).toBe('too_low');
+    expect(kcalZone(2091, 1900)).toBe('high');
+    expect(kcalZone(2280, 1900)).toBe('high');
+    expect(kcalZone(2281, 1900)).toBe('too_high');
+    expect(kcalZone(0, 1900)).toBe('none');
+    expect(kcalZone(1800, 0)).toBe('none');
   });
 
   // a goal without a protein range: the macro goal's grams, almost from 85 %
@@ -132,7 +148,8 @@ describe('library basis switch', () => {
 
   it('colours only the calories over the goal', () => {
     expect(kcalParts(1800, 2000)).toEqual({ within: 1800, over: 0, overColor: KCAL_COLOR.within });
-    expect(kcalParts(2100, 2000)).toEqual({ within: 2000, over: 100, overColor: KCAL_COLOR.over });
+    expect(kcalParts(2100, 2000)).toEqual({ within: 2100, over: 0, overColor: KCAL_COLOR.within });
+    expect(kcalParts(2300, 2000)).toEqual({ within: 2000, over: 300, overColor: KCAL_COLOR.over });
     expect(kcalParts(2500, 2000)).toEqual({ within: 2000, over: 500, overColor: KCAL_COLOR.way_over });
     expect(kcalParts(1500, 0)).toEqual({ within: 1500, over: 0, overColor: KCAL_COLOR.within });
   });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { shift } from '../dates';
-import { weekStats } from '../stats';
+import { kcalWeekTag, proteinWeekTag, weekStats } from '../stats';
 import { getData, setData, setWeighIn } from '../store';
 import { emptyData } from '../types';
 import type { Data, Day } from '../types';
@@ -40,9 +40,45 @@ describe('week stats', () => {
     [200, 200, 200, 60, 60, 60, 100].forEach((p, i) => (days[shift(WS, i)] = day(2000, p)));
     const w = weekStats(withDays(days, { proteinMet: 115, proteinClose: 95 }), WS, shift(WS, 7));
     expect(w.protein).toBeGreaterThan(115);
-    expect(w).toMatchObject({ proteinMet: 3, proteinClose: 1, proteinDays: 7 });
+    expect(w).toMatchObject({ proteinMet: 3, proteinClose: 1, proteinShort: 3, proteinDays: 7 });
+    expect(proteinWeekTag(w)).toEqual({ tag: 'off', label: '4 of 7 days' });
     expect(w.proteinLowest?.share).toBeCloseTo(60 / 115);
     expect(w.proteinLowest?.status).toBe('short');
+  });
+});
+
+describe('protein week by the 80 / 20 rule', () => {
+  const w = (met: number, close: number, short: number) => ({ proteinMet: met, proteinClose: close, proteinShort: short, proteinDays: met + close + short });
+
+  it('is on track with at most one day below almost, however few were reached', () => {
+    expect(proteinWeekTag(w(7, 0, 0))).toEqual({ tag: 'on', label: '7 of 7 days' });
+    expect(proteinWeekTag(w(1, 5, 1))).toEqual({ tag: 'on', label: '6 of 7 days' });
+  });
+
+  it('is acceptable with two such days and off with three', () => {
+    expect(proteinWeekTag(w(3, 2, 2)).tag).toBe('ok');
+    expect(proteinWeekTag(w(4, 0, 3)).tag).toBe('off');
+  });
+});
+
+describe('calorie week', () => {
+  it('counts the days within 85–115 % and those over 130 %', () => {
+    // goal 2000: in range 1700–2300, over 130 % above 2600
+    const days: Record<string, Day> = {};
+    [2000, 1700, 2300, 1699, 2301, 2700, 2000].forEach((k, i) => (days[shift(WS, i)] = day(k)));
+    const w = weekStats(withDays(days, { goal: 2000 }), WS, shift(WS, 7));
+    expect(w).toMatchObject({ kcalInRange: 4, kcalBinge: 1, goalDays: 7 });
+    expect(kcalWeekTag(w)).toEqual({ tag: 'ok', label: '4 of 7 days' });
+  });
+
+  it('is on track with at most two days out and none over 130 %', () => {
+    const w = (inRange: number, binge: number, days = 7) => kcalWeekTag({ kcalInRange: inRange, kcalBinge: binge, goalDays: days });
+    expect(w(7, 0).tag).toBe('on');
+    expect(w(5, 0).tag).toBe('on');
+    expect(w(6, 1).tag).toBe('ok');
+    expect(w(4, 0).tag).toBe('ok');
+    expect(w(3, 0).tag).toBe('off');
+    expect(w(5, 2).tag).toBe('off');
   });
 });
 
