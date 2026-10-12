@@ -57,6 +57,8 @@ export interface Goals {
   min?: number;
   macroMode: MacroMode;
   macroGoal: { p: number | ''; f: number | ''; c: number | '' };
+  /** body weight in kg; when set, the protein target is worked out from it (see proteinGoal) */
+  weight?: number;
 }
 
 /** The goals in force from `from` (YYYY-MM-DD) until the next snapshot. */

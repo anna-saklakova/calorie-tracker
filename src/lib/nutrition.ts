@@ -59,8 +59,37 @@ export interface MacroTargets {
   gramsKcal: number;
 }
 
-export function macroTargets(s: Goals): MacroTargets {
-  const mg = { p: +s.macroGoal.p || 0, f: +s.macroGoal.f || 0, c: +s.macroGoal.c || 0 };
+/** Protein per kg of body weight: the target, and where "reached" and "almost" start. */
+export const PROTEIN_PER_KG = { target: 1.6, met: 1.55, close: 1.45, critical: 1.2 } as const;
+
+export interface ProteinGoal {
+  /** target grams, 0 if unknown */
+  target: number;
+  /** grams from which the day counts as reached */
+  met: number;
+  /** grams from which it counts as almost */
+  close: number;
+  /** below these grams the day is critical; 0 = no such level */
+  critical: number;
+}
+
+/**
+ * The day's protein goal. With a body weight: 1.6 g per kg, reached from 1.55 g/kg, almost from 1.45 g/kg,
+ * critical below 1.2 g/kg, all rounded to whole grams. Without one: the macro goal's protein, reached at the
+ * target, almost from 85 %, no critical level.
+ */
+export function proteinGoal(s: Goals): ProteinGoal {
+  const w = +(s.weight ?? 0) || 0;
+  if (w > 0) {
+    const g = (k: keyof typeof PROTEIN_PER_KG) => Math.round(w * PROTEIN_PER_KG[k]);
+    return { target: g('target'), met: g('met'), close: g('close'), critical: g('critical') };
+  }
+  const target = macroGoalTargets(s).g.p;
+  return { target, met: target, close: target * 0.85, critical: 0 };
+}
+
+/** The targets from the macro goal alone, protein included as entered. */
+function macroGoalTargets(s: Goals, mg = { p: +s.macroGoal.p || 0, f: +s.macroGoal.f || 0, c: +s.macroGoal.c || 0 }): MacroTargets {
   const pctSum = mg.p + mg.f + mg.c;
   const gramsKcal = Math.round(mg.p * 4 + mg.f * 9 + mg.c * 4);
   if (s.macroMode === 'pct') {
@@ -69,6 +98,19 @@ export function macroTargets(s: Goals): MacroTargets {
   }
   const pct = macroPct(mg);
   return { has: gramsKcal > 0, pct: { p: pct.p, f: pct.f, c: pct.c }, g: mg, pctSum, gramsKcal };
+}
+
+/**
+ * Macro targets. With a body weight the protein grams come from it (proteinGoal); in % mode its share
+ * is what those grams make of the calorie goal, so fat and carbs fill the rest of the 100 %.
+ */
+export function macroTargets(s: Goals): MacroTargets {
+  const mg = { p: +s.macroGoal.p || 0, f: +s.macroGoal.f || 0, c: +s.macroGoal.c || 0 };
+  if (!(+(s.weight ?? 0) > 0)) return macroGoalTargets(s, mg);
+  const pg = proteinGoal(s).target;
+  if (s.macroMode === 'g') return macroGoalTargets(s, { ...mg, p: pg });
+  const t = macroGoalTargets(s, { ...mg, p: s.goal > 0 ? Math.round((pg * KCAL_PER_G.p * 100) / s.goal) : 0 });
+  return { ...t, g: { ...t.g, p: pg } };
 }
 
 /**
@@ -83,7 +125,8 @@ export function convertMacroGoal(s: Goals, to: Goals['macroMode']): Goals['macro
     if (!(s.goal > 0) || !t.pctSum) return { p: '', f: '', c: '' };
     return t.g;
   }
-  const kcal = MACRO_KEYS.map(k => (+s.macroGoal[k] || 0) * KCAL_PER_G[k]);
+  const grams = s.weight ? { ...s.macroGoal, p: proteinGoal(s).target } : s.macroGoal;
+  const kcal = MACRO_KEYS.map(k => (+grams[k] || 0) * KCAL_PER_G[k]);
   const total = kcal.reduce((a, b) => a + b, 0);
   if (!total) return { p: '', f: '', c: '' };
   const raw = kcal.map(v => (v * 100) / total);
@@ -141,27 +184,27 @@ export function kcalParts(kcal: number, goal: number): { within: number; over: n
   return { within: goal, over: kcal - goal, overColor: KCAL_COLOR[status] };
 }
 
-export type ProteinStatus = 'none' | 'met' | 'close' | 'short';
+export type ProteinStatus = 'none' | 'met' | 'close' | 'short' | 'critical';
 /**
- * Protein judged by grams: met once the target grams are reached, close from 85 % of them, otherwise short.
- * 'none' without a target or food.
+ * Protein judged by whole grams against the day's goal (proteinGoal): met from its `met` grams,
+ * close from its `close` grams, short down to its `critical` grams, critical below them. 'none' without a target or food.
  */
-export function proteinStatus(protein: number, target: number, anyEaten: boolean): ProteinStatus {
-  if (target <= 0 || !anyEaten) return 'none';
+export function proteinStatus(protein: number, goal: ProteinGoal, anyEaten: boolean): ProteinStatus {
+  if (goal.target <= 0 || !anyEaten) return 'none';
   const g = Math.round(protein);
-  return g >= target ? 'met' : g >= target * 0.85 ? 'close' : 'short';
+  return g >= goal.met ? 'met' : g >= goal.close ? 'close' : g >= goal.critical ? 'short' : 'critical';
 }
 
 /**
  * The protein card's tag, judged by grams. While the day is still going, falling short isn't a verdict yet:
  * the tag stays neutral and shows how much is left, and turns green as soon as the goal is reached.
  */
-export function proteinTag(protein: number, target: number, anyEaten: boolean, dayDone: boolean): { tag: BalanceTag; label: string } {
-  const st = proteinStatus(protein, target, anyEaten);
+export function proteinTag(protein: number, goal: ProteinGoal, anyEaten: boolean, dayDone: boolean): { tag: BalanceTag; label: string } {
+  const st = proteinStatus(protein, goal, anyEaten);
   if (st === 'none') return { tag: 'none', label: TAG_LABEL.none };
   if (st === 'met') return { tag: 'on', label: 'Reached' };
-  if (!dayDone) return { tag: 'none', label: `${fmt(target - Math.round(protein))} g to go` };
-  return st === 'close' ? { tag: 'ok', label: 'Almost' } : { tag: 'off', label: 'Short' };
+  if (!dayDone) return { tag: 'none', label: `${fmt(goal.target - Math.round(protein))} g to go` };
+  return st === 'close' ? { tag: 'ok', label: 'Almost' } : { tag: 'off', label: st === 'critical' ? 'Critical' : 'Short' };
 }
 
 // ── Meal names ──────────────────────────────────────────────
@@ -194,15 +237,16 @@ export interface ProteinPace {
  * still fit into the calories that are left: the rest of the day would need `left / kcalLeft` grams
  * per kcal; a day at the target needs `target / goal`. Up to 1.2× that is on pace (green), up to 1.6×
  * is doable with protein-rich meals (yellow), above that the target is unlikely (red).
- * Reached and close follow proteinStatus (the target grams; from 85 % of them), so from 85 % the
+ * Reached and close follow proteinStatus (the bands of proteinGoal), so from the "almost" grams the
  * verdict is never worse than close, and the weekly marks agree with the panel.
  */
-export function proteinPace(protein: number, target: number, kcal: number, goal: number): ProteinPace {
+export function proteinPace(protein: number, pg: ProteinGoal, kcal: number, goal: number): ProteinPace {
+  const target = pg.target;
   const left = Math.max(0, target - protein);
   const eatenShare = goal > 0 ? Math.min(1, kcal / goal) : 0;
   const expected = Math.round(target * eatenShare);
   const pace = (status: PaceStatus): ProteinPace => ({ status, left, expected, eatenShare });
-  const st = proteinStatus(protein, target, kcal > 0);
+  const st = proteinStatus(protein, pg, kcal > 0);
   if (st === 'none') return pace('none');
   if (st === 'met') return pace('met');
   if (goal <= 0) return pace('none');
