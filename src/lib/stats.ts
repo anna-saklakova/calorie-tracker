@@ -1,13 +1,13 @@
 import { shift } from './dates';
-import { dayTotals, goalsOn, kcalStatus, proteinGoal, proteinStatus } from './nutrition';
+import { dayTotals, goalsOn, kcalBound, proteinGoal, proteinStatus } from './nutrition';
 import type { BalanceTag, ProteinStatus } from './nutrition';
 import type { Data } from './types';
 
 /**
  * A week's numbers, of the finished days only (today counts once it's over).
  *
- * Calories add up over days (energy balance is cumulative), so the week is judged by its arithmetic
- * mean and its sum against the goals of the same days. Protein is judged by days (the 80 / 20 rule,
+ * Calories add up over days (energy balance is cumulative), so the week shows its arithmetic mean and
+ * its sum against the goals of the same days, and is judged by how many days stayed near the goal (kcalWeekTag). Protein is judged by days (the 80 / 20 rule,
  * see proteinWeekTag): how many fell below the almost level, and the lowest day.
  */
 export function weekStats(data: Data, weekStart: string, today: string) {
@@ -40,8 +40,10 @@ export function weekStats(data: Data, weekStart: string, today: string) {
     /** the calorie goals of the logged days added up, 0 when none had one */
     budget: withGoal.length === n ? withGoal.reduce((a, x) => a + x.goals.goal, 0) : 0,
     protein: n ? days.reduce((a, x) => a + x.t.p, 0) / n : 0,
-    /** days that ended within the calorie goal (and not under the minimum), of the days that had a goal */
-    onGoal: withGoal.filter(x => kcalStatus(x.t.kcal, x.goals.goal, x.goals.min ?? 0) === 'within').length,
+    /** days within 85–115 % of their calorie goal, of the days that had a goal */
+    kcalInRange: withGoal.filter(x => inKcalRange(x.t.kcal, x.goals.goal)).length,
+    /** days more than 30 % over their goal */
+    kcalBinge: withGoal.filter(x => x.t.kcal > kcalBound(x.goals.goal, KCAL_WEEK.binge)).length,
     goalDays: withGoal.length,
     /** days the protein target was reached, of the days that had one */
     proteinMet: count('met'),
@@ -53,6 +55,24 @@ export function weekStats(data: Data, weekStart: string, today: string) {
   };
 }
 export type WeekStats = ReturnType<typeof weekStats>;
+
+/**
+ * The week's calorie rule: most days within 85–115 % of the goal; one or two days outside it are fine
+ * (a day at maintenance, a day with little appetite), as long as none goes more than 30 % over.
+ */
+export const KCAL_WEEK = { range: 0.15, binge: 0.3, outOn: 2, outOk: 3 } as const;
+const inKcalRange = (kcal: number, goal: number) => kcal >= kcalBound(goal, -KCAL_WEEK.range) && kcal <= kcalBound(goal, KCAL_WEEK.range);
+
+/**
+ * The week's calorie verdict: on track with at most two days outside 85–115 % and none over 130 %;
+ * acceptable with three such days or one day over 130 %; off balance beyond that.
+ */
+export function kcalWeekTag(w: Pick<WeekStats, 'kcalInRange' | 'kcalBinge' | 'goalDays'>): { tag: BalanceTag; label: string } {
+  const out = w.goalDays - w.kcalInRange;
+  const label = `${w.kcalInRange} of ${w.goalDays} days`;
+  if (out <= KCAL_WEEK.outOn && w.kcalBinge === 0) return { tag: 'on', label };
+  return { tag: out <= KCAL_WEEK.outOk && w.kcalBinge <= 1 ? 'ok' : 'off', label };
+}
 
 /** Days below the almost level a week can have and still be on track, or acceptable. */
 export const PROTEIN_LOW_DAYS = { on: 1, ok: 2 } as const;

@@ -166,17 +166,36 @@ export function goalsOn(s: Settings, date: string): Goals {
 
 export type KcalStatus = 'none' | 'under' | 'within' | 'over' | 'way_over';
 /**
- * Within the goal, up to 10 % over, or more than 10 % over. A finished day (`dayDone`) that stayed
- * below the minimum is 'under'; a day still in progress is never judged as under.
+ * Within ±10 % of the goal, 10–20 % over, or more than 20 % over (the bands of kcalZone). A finished
+ * day (`dayDone`) that stayed below the minimum is 'under'; a day still in progress is never judged as under.
  */
 export function kcalStatus(kcal: number, goal: number, min = 0, dayDone = true): KcalStatus {
   if (kcal <= 0) return 'none';
   if (dayDone && min > 0 && kcal < min) return 'under';
   if (goal <= 0) return 'none';
-  if (kcal <= goal) return 'within';
-  return kcal <= goal * 1.1 ? 'over' : 'way_over';
+  if (kcal <= kcalBound(goal, KCAL_ZONE.ideal)) return 'within';
+  return kcalBound(goal, KCAL_ZONE.ok) >= kcal ? 'over' : 'way_over';
 }
 export const KCAL_COLOR: Record<KcalStatus, string> = { none: '#F3E6DF', under: 'var(--est)', within: 'var(--accent)', over: 'var(--est)', way_over: 'var(--danger)' };
+
+/** How far a day may stray from the calorie goal: ±10 % is ideal, ±20 % is fine, beyond that is the red zone. */
+export const KCAL_ZONE = { ideal: 0.1, ok: 0.2 } as const;
+/** The goal moved by a share, rounded to whole kcal: kcalBound(1900, 0.1) = 2090, kcalBound(1900, -0.1) = 1710. */
+export const kcalBound = (goal: number, share: number) => Math.round(goal * (1 + share));
+
+export type KcalZone = 'none' | 'ideal' | 'low' | 'high' | 'too_low' | 'too_high';
+/**
+ * A day's calories against its goal: ideal within 90–110 %, low 80–90 % or high 110–120 % (fine now and
+ * then), too low below 80 % (recovery and muscle suffer) or too high above 120 % (wipes out the week's deficit).
+ */
+export function kcalZone(kcal: number, goal: number): KcalZone {
+  if (kcal <= 0 || goal <= 0) return 'none';
+  const { ideal, ok } = KCAL_ZONE;
+  if (kcal < kcalBound(goal, -ok)) return 'too_low';
+  if (kcal < kcalBound(goal, -ideal)) return 'low';
+  if (kcal <= kcalBound(goal, ideal)) return 'ideal';
+  return kcal <= kcalBound(goal, ok) ? 'high' : 'too_high';
+}
 
 /**
  * Calories split for drawing: the part up to the goal is always green; only the part over it
