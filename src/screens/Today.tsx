@@ -4,7 +4,7 @@ import { DateStrip, NumInput } from '../components/ui';
 import { dayLabel, shift } from '../lib/dates';
 import { amountLabel, dayTotals, fmt, goalsOn, kcalParts, mealLabels, PACE_LABEL, proteinGoal, proteinPace } from '../lib/nutrition';
 import type { PaceStatus, ProteinGoal } from '../lib/nutrition';
-import { setWeighIn, updateSettings } from '../lib/store';
+import { setWeighIn } from '../lib/store';
 import type { Data, Item, Meal } from '../lib/types';
 import { daysSinceWeighIn, WEIGH_EVERY, weighIns } from '../lib/weight';
 
@@ -92,7 +92,7 @@ function ProteinPanel({ protein, pg, kcal, goal }: { protein: number; pg: Protei
 
 /**
  * The weekly weigh-in. Shown on a day that has one, and on today when the last one is a week old or
- * there is none. The latest weigh-in is also the weight protein is worked out from.
+ * there is none.
  */
 function WeighInRow({ data, date }: { data: Data; date: string }) {
   const [text, setText] = useState(data.days[date]?.weight ? String(data.days[date]!.weight) : '');
@@ -113,9 +113,6 @@ function WeighInRow({ data, date }: { data: Data; date: string }) {
               setText(v);
               const kg = Math.max(0, Math.round((+v || 0) * 10) / 10);
               setWeighIn(date, kg);
-              // the latest weigh-in sets the weight for the protein goal
-              const later = weighIns(data).some(w => w.date > date);
-              if (kg > 0 && !later) updateSettings({ weight: kg });
             }}
             className="num"
             style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}

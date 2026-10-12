@@ -1,5 +1,5 @@
 import { shift } from './dates';
-import { dayTotals, goalsOn, kcalStatus, proteinGoal, proteinStatus, proteinWeight } from './nutrition';
+import { dayTotals, goalsOn, kcalStatus, proteinGoal, proteinStatus } from './nutrition';
 import type { ProteinStatus } from './nutrition';
 import type { Data } from './types';
 
@@ -15,7 +15,7 @@ export function weekStats(data: Data, weekStart: string, today: string) {
   const days = past
     .map(d => {
       const goals = goalsOn(data.settings, d);
-      return { d, t: dayTotals(data.days[d]), goals, pg: proteinGoal(goals), pw: proteinWeight(goals) };
+      return { d, t: dayTotals(data.days[d]), goals, pg: proteinGoal(goals) };
     })
     .filter(x => x.t.kcal > 0);
   const n = days.length;
@@ -24,7 +24,7 @@ export function weekStats(data: Data, weekStart: string, today: string) {
   const withProtein = days.filter(x => x.pg.target > 0);
   const statuses = withProtein.map(x => proteinStatus(x.t.p, x.pg, true));
   const count = (st: ProteinStatus) => statuses.filter(s => s === st).length;
-  // the lowest day: per kg when protein comes from weight, otherwise as a share of the target
+  // the lowest day, as a share of its target
   const lowest = withProtein.length
     ? withProtein.reduce((lo, x) => (x.t.p / x.pg.target < lo.t.p / lo.pg.target ? x : lo))
     : null;
@@ -47,7 +47,7 @@ export function weekStats(data: Data, weekStart: string, today: string) {
     proteinMet: count('met'),
     proteinClose: count('close'),
     proteinDays: withProtein.length,
-    proteinLowest: lowest ? { g: lowest.t.p, perKg: lowest.pw > 0 ? lowest.t.p / lowest.pw : 0, share: lowest.t.p / lowest.pg.target, status: proteinStatus(lowest.t.p, lowest.pg, true) } : null
+    proteinLowest: lowest ? { g: lowest.t.p, share: lowest.t.p / lowest.pg.target, status: proteinStatus(lowest.t.p, lowest.pg, true) } : null
   };
 }
 export type WeekStats = ReturnType<typeof weekStats>;

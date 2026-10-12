@@ -47,8 +47,8 @@ describe('day status', () => {
     expect(kcalStatus(2201, 2000)).toBe('way_over');
   });
 
-  // a goal without a weight: the macro goal's grams, almost from 85 %
-  const g = (target: number) => ({ target, met: target, close: target * 0.85, critical: 0 });
+  // a goal without a protein range: the macro goal's grams, almost from 85 %
+  const g = (target: number) => ({ target, met: target, close: target * 0.85 });
 
   it('marks protein met by grams, close or short', () => {
     expect(proteinStatus(150, g(150), true)).toBe('met');
@@ -68,44 +68,52 @@ describe('day status', () => {
   });
 });
 
-describe('protein from body weight', () => {
-  const goals = (weight: number, over: Partial<Goals> = {}): Goals => ({ goal: 2000, macroMode: 'pct', macroGoal: { p: 30, f: 30, c: 40 }, weight, ...over });
+describe('protein range', () => {
+  const goals = (proteinMet?: number, proteinClose?: number, over: Partial<Goals> = {}): Goals => ({ goal: 2000, macroMode: 'pct', macroGoal: { p: 30, f: 30, c: 40 }, proteinMet, proteinClose, ...over });
 
-  it('sets 1.6 g per kg, reached from 1.55, almost from 1.45, critical below 1.2, in whole grams', () => {
-    expect(proteinGoal(goals(70))).toEqual({ target: 112, met: 109, close: 102, critical: 84 });
-    expect(proteinGoal(goals(63))).toEqual({ target: 101, met: 98, close: 91, critical: 76 });
+  it('takes reached and almost from the range the user set', () => {
+    expect(proteinGoal(goals(115, 95))).toEqual({ target: 115, met: 115, close: 95 });
   });
 
-  it('judges the day by those bands', () => {
-    const pg = proteinGoal(goals(70));
-    expect(proteinStatus(108.6, pg, true)).toBe('met'); // rounds to 109 = 1.55 g/kg
-    expect(proteinStatus(108, pg, true)).toBe('close');
-    expect(proteinStatus(102, pg, true)).toBe('close');
-    expect(proteinStatus(101, pg, true)).toBe('short');
-    expect(proteinStatus(84, pg, true)).toBe('short');
-    expect(proteinStatus(83, pg, true)).toBe('critical');
-    expect(proteinTag(83, pg, true, true)).toEqual({ tag: 'off', label: 'Critical' });
-    expect(proteinTag(83, pg, true, false)).toEqual({ tag: 'none', label: '29 g to go' });
+  it('uses 115 / 95 for goals saved before the range existed', () => {
+    expect(proteinGoal(goals())).toEqual({ target: 115, met: 115, close: 95 });
   });
 
-  it('falls back to the macro goal without a weight', () => {
-    expect(proteinGoal(goals(0)).target).toBe(150);
+  it('judges the day by the range: reached, almost, not reached', () => {
+    const pg = proteinGoal(goals(115, 95));
+    expect(proteinStatus(140, pg, true)).toBe('met');
+    expect(proteinStatus(114.6, pg, true)).toBe('met'); // rounds to 115
+    expect(proteinStatus(114, pg, true)).toBe('close');
+    expect(proteinStatus(95, pg, true)).toBe('close');
+    expect(proteinStatus(94, pg, true)).toBe('short');
+    expect(proteinStatus(20, pg, true)).toBe('short');
+    expect(proteinTag(94, pg, true, true)).toEqual({ tag: 'off', label: 'Short' });
+    expect(proteinTag(94, pg, true, false)).toEqual({ tag: 'none', label: '21 g to go' });
   });
 
-  it('puts the weight-based protein into the macro targets', () => {
-    const pct = macroTargets(goals(70));
-    expect(pct.g.p).toBe(112);
-    expect(pct.pct.p).toBe(22); // 448 kcal of 2000
-    expect(pct.has).toBe(false); // 22 + 30 + 40
-    expect(macroTargets(goals(70, { macroGoal: { p: '', f: 30, c: 48 } })).has).toBe(true);
-    expect(macroTargets(goals(70, { macroMode: 'g', macroGoal: { p: 150, f: 70, c: 200 } })).g).toEqual({ p: 112, f: 70, c: 200 });
+  it('has no almost band without a lower bound, or with one not below reached', () => {
+    expect(proteinGoal(goals(115, 0)).close).toBe(115);
+    expect(proteinGoal(goals(115, 120)).close).toBe(115);
   });
 
-  it('records the weight in the goal history', () => {
+  it('falls back to the macro goal when the range is cleared', () => {
+    expect(proteinGoal(goals(0, 95))).toEqual({ target: 150, met: 150, close: 127.5 });
+  });
+
+  it('puts the range into the macro targets', () => {
+    const pct = macroTargets(goals(115, 95));
+    expect(pct.g.p).toBe(115);
+    expect(pct.pct.p).toBe(23); // 460 kcal of 2000
+    expect(pct.has).toBe(false); // 23 + 30 + 40
+    expect(macroTargets(goals(115, 95, { macroGoal: { p: '', f: 30, c: 47 } })).has).toBe(true);
+    expect(macroTargets(goals(115, 95, { macroMode: 'g', macroGoal: { p: 150, f: 70, c: 200 } })).g).toEqual({ p: 115, f: 70, c: 200 });
+  });
+
+  it('records the range in the goal history', () => {
     setData(emptyData());
-    updateSettings({ weight: 70 }, '2026-10-10');
-    expect(goalsOn(getData().settings, '2026-10-09').weight).toBe(0);
-    expect(goalsOn(getData().settings, '2026-10-10').weight).toBe(70);
+    updateSettings({ proteinMet: 130, proteinClose: 110 }, '2026-10-10');
+    expect(proteinGoal(goalsOn(getData().settings, '2026-10-09'))).toMatchObject({ met: 115, close: 95 });
+    expect(proteinGoal(goalsOn(getData().settings, '2026-10-10'))).toMatchObject({ met: 130, close: 110 });
   });
 });
 
@@ -148,7 +156,7 @@ describe('minimum calories', () => {
 });
 
 describe('protein pace', () => {
-  const pg = { target: 120, met: 120, close: 102, critical: 0 };
+  const pg = { target: 120, met: 120, close: 102 };
   const pace = (p: number, kcal: number) => proteinPace(p, pg, kcal, 2000).status;
 
   it('judges by whether the missing grams still fit into the calories left', () => {
@@ -169,7 +177,7 @@ describe('protein pace', () => {
 
   it('says nothing without a target or food, and reports the expected grams', () => {
     expect(pace(0, 0)).toBe('none');
-    expect(proteinPace(30, { target: 0, met: 0, close: 0, critical: 0 }, 800, 2000).status).toBe('none');
+    expect(proteinPace(30, { target: 0, met: 0, close: 0 }, 800, 2000).status).toBe('none');
     expect(proteinPace(30, pg, 1000, 0).status).toBe('none');
     expect(proteinPace(50, pg, 1000, 2000)).toMatchObject({ expected: 60, left: 70, eatenShare: 0.5 });
   });

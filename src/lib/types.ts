@@ -59,10 +59,10 @@ export interface Goals {
   min?: number;
   macroMode: MacroMode;
   macroGoal: { p: number | ''; f: number | ''; c: number | '' };
-  /** body weight in kg; when set, the protein target is worked out from it (see proteinGoal) */
-  weight?: number;
-  /** height in cm; when set, protein is worked out from at most the weight at BMI 27.5 (see proteinWeight) */
-  height?: number;
+  /** protein grams from which the day counts as reached; 0 = no range, missing = the default range (see proteinRange) */
+  proteinMet?: number;
+  /** protein grams from which the day counts as almost reached; below them it's not reached */
+  proteinClose?: number;
 }
 
 /** The goals in force from `from` (YYYY-MM-DD) until the next snapshot. */
@@ -92,6 +92,8 @@ export const defaultSettings = (): Settings => ({
   min: 0,
   macroMode: 'pct',
   macroGoal: { p: 30, f: 30, c: 40 },
+  proteinMet: 115,
+  proteinClose: 95,
   units: 'g',
   updatedAt: 0
 });

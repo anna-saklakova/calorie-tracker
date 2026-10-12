@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { shift } from '../dates';
-import { proteinGoal, proteinWeight } from '../nutrition';
 import { weekStats } from '../stats';
-import { getData, setData, setWeighIn, updateSettings } from '../store';
+import { getData, setData, setWeighIn } from '../store';
 import { emptyData } from '../types';
-import type { Data, Day, Goals } from '../types';
+import type { Data, Day } from '../types';
 import { daysSinceWeighIn, maintenance, weightTrend } from '../weight';
 
 const day = (kcal: number, p = 0, weight?: number): Day => ({
@@ -19,24 +18,6 @@ function withDays(days: Record<string, Day>, settings: Partial<Data['settings']>
   const d = emptyData();
   return { ...d, days, settings: { ...d.settings, ...settings } };
 }
-
-describe('protein weight', () => {
-  const g = (weight: number, height?: number): Goals => ({ goal: 2000, macroMode: 'pct', macroGoal: { p: 30, f: 30, c: 40 }, weight, height });
-
-  it('uses the body weight without a height', () => {
-    expect(proteinWeight(g(95))).toBe(95);
-  });
-
-  it('caps the weight at BMI 27.5 for the height', () => {
-    // 27.5 × 1.70² = 79.5
-    expect(proteinWeight(g(95, 170))).toBe(79.5);
-    expect(proteinGoal(g(95, 170)).target).toBe(Math.round(79.5 * 1.6));
-  });
-
-  it('leaves a weight under the cap alone', () => {
-    expect(proteinWeight(g(62, 170))).toBe(62);
-  });
-});
 
 describe('week stats', () => {
   it('averages the logged finished days and counts the coverage', () => {
@@ -54,14 +35,14 @@ describe('week stats', () => {
   });
 
   it('judges protein by days, not by the average', () => {
-    // 70 kg → target 112 g, met from 109 g. Three big days and four poor ones average above the target.
+    // reached from 115 g, almost from 95 g. Three big days and four poor ones average above the target.
     const days: Record<string, Day> = {};
-    [200, 200, 200, 60, 60, 60, 60].forEach((p, i) => (days[shift(WS, i)] = day(2000, p)));
-    const w = weekStats(withDays(days, { weight: 70 }), WS, shift(WS, 7));
-    expect(w.protein).toBeGreaterThan(112);
-    expect(w).toMatchObject({ proteinMet: 3, proteinDays: 7 });
-    expect(w.proteinLowest?.perKg).toBeCloseTo(60 / 70);
-    expect(w.proteinLowest?.status).toBe('critical');
+    [200, 200, 200, 60, 60, 60, 100].forEach((p, i) => (days[shift(WS, i)] = day(2000, p)));
+    const w = weekStats(withDays(days, { proteinMet: 115, proteinClose: 95 }), WS, shift(WS, 7));
+    expect(w.protein).toBeGreaterThan(115);
+    expect(w).toMatchObject({ proteinMet: 3, proteinClose: 1, proteinDays: 7 });
+    expect(w.proteinLowest?.share).toBeCloseTo(60 / 115);
+    expect(w.proteinLowest?.status).toBe('short');
   });
 });
 
@@ -120,11 +101,4 @@ describe('weigh-ins in the store', () => {
     expect(daysSinceWeighIn(getData(), '2026-10-17')).toBeNull();
   });
 
-  it('keeps the height in the goal history', () => {
-    updateSettings({ weight: 95 }, '2026-10-01');
-    updateSettings({ height: 170 }, '2026-10-10');
-    const h = getData().settings.goalHistory!;
-    expect(h.find(x => x.from === '2026-10-01')?.height).toBe(0);
-    expect(h.find(x => x.from === '2026-10-10')?.height).toBe(170);
-  });
 });
