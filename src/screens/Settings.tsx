@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { ChevronRight } from '../components/icons';
 import { NumInput, Segmented, SubHeader } from '../components/ui';
 import { todayIso } from '../lib/dates';
-import { convertMacroGoal, fmt, macroTargets, PROTEIN_BMI_CAP, PROTEIN_PER_KG, proteinWeight } from '../lib/nutrition';
-import { liveLibrary, setWeighIn, updateSettings } from '../lib/store';
+import { convertMacroGoal, fmt, macroTargets, proteinRange } from '../lib/nutrition';
+import { liveLibrary, updateSettings } from '../lib/store';
 import { syncLabel } from '../lib/sync';
 import type { SyncState } from '../lib/sync';
 import type { Data, Settings as S } from '../lib/types';
@@ -20,21 +20,19 @@ interface Props {
 
 const MACROS: ['p' | 'f' | 'c', string, string][] = [['p', 'Protein', 'var(--rose-ink)'], ['f', 'Fat', 'var(--peach-ink)'], ['c', 'Carbs', 'var(--accent-ink)']];
 
-const byWeightOf = (s: S) => (s.weight ?? 0) > 0;
-
 export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }: Props) {
   const s = data.settings;
   const t = macroTargets(s);
   const hasGoal = s.goal > 0;
   const [goalText, setGoalText] = useState(s.goal ? String(s.goal) : '');
   const [minText, setMinText] = useState(s.min ? String(s.min) : '');
-  const [weightText, setWeightText] = useState(s.weight ? String(s.weight) : '');
-  const [heightText, setHeightText] = useState(s.height ? String(s.height) : '');
-  const pw = proteinWeight(s);
-  const capped = byWeightOf(s) && pw < (s.weight ?? 0);
+  const range = proteinRange(s);
+  const [metText, setMetText] = useState(range ? String(range.met) : '');
+  const [closeText, setCloseText] = useState(range && range.close < range.met ? String(range.close) : '');
   const m = maintenance(data, todayIso());
-  // with a weight, protein is worked out from it and can't be typed in
-  const byWeight = byWeightOf(s);
+  // with a protein range, the macro goal's protein comes from it and can't be typed in
+  const byRange = !!range;
+  const closeOff = byRange && closeText !== '' && +closeText >= range.met;
   const minAboveGoal = hasGoal && (s.min ?? 0) > s.goal;
   // re-render every minute so "Synced · n min ago" stays current
   const [, tick] = useState(0);
@@ -45,7 +43,7 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
 
   const macroSum =
     s.macroMode === 'pct'
-      ? t.pctSum === 100 ? 'Adds up to 100%' : byWeight && hasGoal ? `Protein ${t.pct.p}% from weight · fat + carbs should be ${100 - t.pct.p}%` : `Adds up to ${t.pctSum}%, should be 100`
+      ? t.pctSum === 100 ? 'Adds up to 100%' : byRange && hasGoal ? `Protein ${t.pct.p}% from the protein goal · fat + carbs should be ${100 - t.pct.p}%` : `Adds up to ${t.pctSum}%, should be 100`
       : `≈ ${t.gramsKcal} kcal` + (hasGoal ? ` · ${t.pct.p} / ${t.pct.f} / ${t.pct.c} %` : '');
 
   const user = sync.user;
@@ -105,48 +103,49 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
 
           <div className="row row-sep">
             <div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>Weight</div>
-              <div className="row-sub">{byWeight ? `Protein goal ${t.g.p} g · ${PROTEIN_PER_KG.target} g per kg` : `Sets protein at ${PROTEIN_PER_KG.target} g per kg`}</div>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>Protein reached</div>
+              <div className="row-sub">From this much a day · empty = from the macro goal</div>
             </div>
             <div className="input-wrap">
               <NumInput
-                value={weightText}
-                ariaLabel="Body weight in kg"
+                value={metText}
+                ariaLabel="Protein reached from, grams"
                 placeholder="—"
                 onChange={v => {
-                  setWeightText(v);
-                  const kg = Math.max(0, Math.round((+v || 0) * 10) / 10);
-                  updateSettings({ weight: kg });
-                  // the weight is today's weigh-in too, so the trend on Week sees it
-                  setWeighIn(todayIso(), kg);
+                  setMetText(v);
+                  updateSettings({ proteinMet: Math.max(0, Math.round(+v || 0)), proteinClose: Math.max(0, Math.round(+closeText || 0)) });
                 }}
                 className="num"
                 style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}
               />
-              <span className="unit">kg</span>
+              <span className="unit">g</span>
             </div>
           </div>
 
-          <div className="row row-sep">
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>Height</div>
-              <div className="row-sub">{capped ? `Protein counted for ${pw} kg · BMI ${PROTEIN_BMI_CAP}` : `Protein counts weight up to BMI ${PROTEIN_BMI_CAP}`}</div>
+          {byRange && (
+            <div className="row row-sep">
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 600 }}>Almost reached</div>
+                <div className="row-sub" style={{ color: closeOff ? 'var(--est)' : undefined }}>
+                  {closeOff ? 'Should be below reached' : `${closeText ? `${closeText}–${range.met - 1} g almost · below ${closeText} g` : `Below ${range.met} g`} not reached`}
+                </div>
+              </div>
+              <div className="input-wrap">
+                <NumInput
+                  value={closeText}
+                  ariaLabel="Protein almost reached from, grams"
+                  placeholder="—"
+                  onChange={v => {
+                    setCloseText(v);
+                    updateSettings({ proteinMet: range.met, proteinClose: Math.max(0, Math.round(+v || 0)) });
+                  }}
+                  className="num"
+                  style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}
+                />
+                <span className="unit">g</span>
+              </div>
             </div>
-            <div className="input-wrap">
-              <NumInput
-                value={heightText}
-                ariaLabel="Height in cm"
-                placeholder="—"
-                onChange={v => {
-                  setHeightText(v);
-                  updateSettings({ height: Math.max(0, Math.round(+v || 0)) });
-                }}
-                className="num"
-                style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}
-              />
-              <span className="unit">cm</span>
-            </div>
-          </div>
+          )}
 
           <div className="row-sep" style={{ padding: '14px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -161,8 +160,8 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
                 <label key={k} className="field">
                   <span style={{ color }}>{label}</span>
                   <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', borderRadius: 10, height: 44, padding: '0 10px' }}>
-                    {k === 'p' && byWeight ? (
-                      <span className="num" style={{ width: '100%', minWidth: 0, fontSize: 15, fontWeight: 600, color: 'var(--muted)' }} title="From your weight">
+                    {k === 'p' && byRange ? (
+                      <span className="num" style={{ width: '100%', minWidth: 0, fontSize: 15, fontWeight: 600, color: 'var(--muted)' }} title="From the protein goal">
                         {s.macroMode === 'pct' ? (hasGoal ? t.pct.p : '—') : t.g.p}
                       </span>
                     ) : (

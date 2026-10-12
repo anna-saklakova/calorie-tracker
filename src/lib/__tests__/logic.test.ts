@@ -32,11 +32,12 @@ describe('nutrition', () => {
   });
 
   it('derives targets in % and grams mode', () => {
-    const pct = macroTargets({ macroMode: 'pct', macroGoal: { p: 30, f: 30, c: 40 }, goal: 2000 });
+    // no protein range: protein comes from the macro goal
+    const pct = macroTargets({ macroMode: 'pct', macroGoal: { p: 30, f: 30, c: 40 }, goal: 2000, proteinMet: 0 });
     expect(pct.has).toBe(true);
     expect(pct.g).toEqual({ p: 150, f: 67, c: 200 });
-    expect(macroTargets({ macroMode: 'pct', macroGoal: { p: 30, f: 30, c: 30 }, goal: 2000 }).has).toBe(false);
-    const g = macroTargets({ macroMode: 'g', macroGoal: { p: 150, f: 70, c: 200 }, goal: 0 });
+    expect(macroTargets({ macroMode: 'pct', macroGoal: { p: 30, f: 30, c: 30 }, goal: 2000, proteinMet: 0 }).has).toBe(false);
+    const g = macroTargets({ macroMode: 'g', macroGoal: { p: 150, f: 70, c: 200 }, goal: 0, proteinMet: 0 });
     expect(g.gramsKcal).toBe(2030);
     expect(g.pct).toEqual({ p: 30, f: 31, c: 39 });
   });
@@ -76,11 +77,11 @@ describe('auth errors', () => {
   });
 
   it('converts the macro goal when switching % and grams', () => {
-    const pct = { goal: 2000, macroMode: 'pct' as const, macroGoal: { p: 30, f: 30, c: 40 } };
+    const pct = { goal: 2000, macroMode: 'pct' as const, macroGoal: { p: 30, f: 30, c: 40 }, proteinMet: 0 };
     // 600 kcal protein = 150 g, 600 kcal fat ≈ 67 g, 800 kcal carbs = 200 g
     expect(convertMacroGoal(pct, 'g')).toEqual({ p: 150, f: 67, c: 200 });
     expect(convertMacroGoal({ ...pct, goal: 0 }, 'g')).toEqual({ p: '', f: '', c: '' });
-    const g = { goal: 2000, macroMode: 'g' as const, macroGoal: { p: 150, f: 67, c: 200 } };
+    const g = { goal: 2000, macroMode: 'g' as const, macroGoal: { p: 150, f: 67, c: 200 }, proteinMet: 0 };
     const back = convertMacroGoal(g, 'pct');
     expect(back).toEqual({ p: 30, f: 30, c: 40 });
     // shares that don't round to 100 still add up to 100

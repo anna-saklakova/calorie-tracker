@@ -138,7 +138,7 @@ export function deleteProduct(id: string) {
   update(d => ({ ...d, library: d.library.map(x => (x.id === id ? { ...x, deleted: true, updatedAt: Date.now() } : x)) }));
 }
 
-const pickGoals = (s: Goals): Goals => ({ goal: s.goal, min: s.min ?? 0, macroMode: s.macroMode, macroGoal: { ...s.macroGoal }, weight: s.weight ?? 0, height: s.height ?? 0 });
+const pickGoals = (s: Goals): Goals => ({ goal: s.goal, min: s.min ?? 0, macroMode: s.macroMode, macroGoal: { ...s.macroGoal }, proteinMet: s.proteinMet, proteinClose: s.proteinClose });
 
 /**
  * Applies a settings change. A change to the goals is recorded as starting today,
@@ -147,7 +147,7 @@ const pickGoals = (s: Goals): Goals => ({ goal: s.goal, min: s.min ?? 0, macroMo
 export function updateSettings(patch: Partial<Settings>, today = todayIso()) {
   update(d => {
     const next: Settings = { ...d.settings, ...patch, updatedAt: Date.now() };
-    if ('goal' in patch || 'min' in patch || 'macroMode' in patch || 'macroGoal' in patch || 'weight' in patch || 'height' in patch) {
+    if ('goal' in patch || 'min' in patch || 'macroMode' in patch || 'macroGoal' in patch || 'proteinMet' in patch || 'proteinClose' in patch) {
       // first change ever: the goals so far covered every earlier day
       const history = d.settings.goalHistory?.length ? d.settings.goalHistory : [{ from: '0000-01-01', ...pickGoals(d.settings) }];
       next.goalHistory = [...history.filter(h => h.from < today), { from: today, ...pickGoals(next) }];
