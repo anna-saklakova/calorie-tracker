@@ -42,8 +42,6 @@ describe('week stats', () => {
     expect(w.protein).toBeGreaterThan(115);
     expect(w).toMatchObject({ proteinMet: 3, proteinClose: 1, proteinShort: 3, proteinDays: 7 });
     expect(proteinWeekTag(w)).toEqual({ tag: 'off', label: '4 of 7 days' });
-    expect(w.proteinLowest?.share).toBeCloseTo(60 / 115);
-    expect(w.proteinLowest?.status).toBe('short');
   });
 });
 

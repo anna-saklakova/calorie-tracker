@@ -8,7 +8,7 @@ import type { Data } from './types';
  *
  * Calories add up over days (energy balance is cumulative), so the week shows its arithmetic mean and
  * its sum against the goals of the same days, and is judged by the colours of its days (kcalWeekTag). Protein is judged by days (the 80 / 20 rule,
- * see proteinWeekTag): how many fell below the almost level, and the lowest day.
+ * see proteinWeekTag): how many fell below the almost level.
  */
 export function weekStats(data: Data, weekStart: string, today: string) {
   const past = Array.from({ length: 7 }, (_, i) => shift(weekStart, i)).filter(d => d < today);
@@ -25,10 +25,6 @@ export function weekStats(data: Data, weekStart: string, today: string) {
   const withProtein = days.filter(x => x.pg.target > 0);
   const statuses = withProtein.map(x => proteinStatus(x.t.p, x.pg, true));
   const count = (st: ProteinStatus) => statuses.filter(s => s === st).length;
-  // the lowest day, as a share of its target
-  const lowest = withProtein.length
-    ? withProtein.reduce((lo, x) => (x.t.p / x.pg.target < lo.t.p / lo.pg.target ? x : lo))
-    : null;
   return {
     /** finished days of the week so far (7 for a past week) */
     past: past.length,
@@ -53,8 +49,7 @@ export function weekStats(data: Data, weekStart: string, today: string) {
     proteinClose: count('close'),
     /** days below the almost level */
     proteinShort: count('short'),
-    proteinDays: withProtein.length,
-    proteinLowest: lowest ? { g: lowest.t.p, share: lowest.t.p / lowest.pg.target, status: proteinStatus(lowest.t.p, lowest.pg, true) } : null
+    proteinDays: withProtein.length
   };
 }
 export type WeekStats = ReturnType<typeof weekStats>;
@@ -68,7 +63,7 @@ export const KCAL_WEEK = { greenShare: 0.5, redOn: 2, redOk: 3, binge: 0.3 } as 
  * Acceptable: at most 3 red and at most one day over 130 %. Off balance otherwise.
  */
 export function kcalWeekTag(w: Pick<WeekStats, 'kcalGreen' | 'kcalRed' | 'kcalBinge' | 'goalDays'>): { tag: BalanceTag; label: string } {
-  const label = `${w.kcalGreen} of ${w.goalDays} days`;
+  const label = `${w.kcalGreen} of ${w.goalDays} ${w.goalDays === 1 ? 'day' : 'days'}`;
   if (w.kcalGreen >= w.goalDays * KCAL_WEEK.greenShare && w.kcalRed <= KCAL_WEEK.redOn && w.kcalBinge === 0) return { tag: 'on', label };
   return { tag: w.kcalRed <= KCAL_WEEK.redOk && w.kcalBinge <= 1 ? 'ok' : 'off', label };
 }
@@ -82,6 +77,6 @@ export const PROTEIN_LOW_DAYS = { on: 1, ok: 2 } as const;
  * acceptable as a rare exception, more is off balance. The label counts the days at least almost.
  */
 export function proteinWeekTag(w: Pick<WeekStats, 'proteinMet' | 'proteinClose' | 'proteinShort' | 'proteinDays'>): { tag: BalanceTag; label: string } {
-  const label = `${w.proteinMet + w.proteinClose} of ${w.proteinDays} days`;
+  const label = `${w.proteinMet + w.proteinClose} of ${w.proteinDays} ${w.proteinDays === 1 ? 'day' : 'days'}`;
   return { tag: w.proteinShort <= PROTEIN_LOW_DAYS.on ? 'on' : w.proteinShort <= PROTEIN_LOW_DAYS.ok ? 'ok' : 'off', label };
 }

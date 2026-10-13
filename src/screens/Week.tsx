@@ -19,6 +19,8 @@ interface Props {
 }
 
 const H = 120;
+/** room above the bars for the key of the goal and minimum lines */
+const CHART_TOP = 34;
 
 type Summary = WeekStats;
 
@@ -102,14 +104,14 @@ function MarkRow<K extends string>({ title, days, mark }: { title: string; days:
 
 /** The verdict of a finished week, for calories and protein side by side. */
 function WeekResult({ w }: { w: WeekStats }) {
-  const tiles: { title: string; tag: { tag: BalanceTag; label: string }; line: string; sub: string }[] = [];
+  const tiles: { title: string; tag: { tag: BalanceTag; label: string }; line: string; sub: string; warn?: string }[] = [];
   if (w.goalDays) {
     const t = kcalWeekTag(w);
-    tiles.push({ title: 'Calories', tag: t, line: `${t.label} on goal`, sub: [`${w.kcalYellow} almost · ${w.kcalRed} off`, w.kcalBinge ? `${w.kcalBinge} over 130 %` : ''].filter(Boolean).join(' · ') });
+    tiles.push({ title: 'Calories', tag: t, line: `${w.kcalGreen} of ${w.goalDays} on goal`, sub: `${w.kcalYellow} almost · ${w.kcalRed} off`, warn: w.kcalBinge ? `${w.kcalBinge} over 130 %` : '' });
   }
   if (w.proteinDays) {
     const t = proteinWeekTag(w);
-    tiles.push({ title: 'Protein', tag: t, line: `${t.label} reached or almost`, sub: `${w.proteinShort} low ${w.proteinShort === 1 ? 'day' : 'days'}` });
+    tiles.push({ title: 'Protein', tag: t, line: `${w.proteinMet} of ${w.proteinDays} reached`, sub: `${w.proteinClose} almost · ${w.proteinShort} low` });
   }
   if (!tiles.length) return null;
   return (
@@ -117,7 +119,7 @@ function WeekResult({ w }: { w: WeekStats }) {
       <div className="label" style={{ padding: '0 4px 10px' }}>Week result</div>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tiles.length},1fr)`, gap: 8 }}>
         {tiles.map(t => (
-          <div key={t.title} className="card" style={{ padding: 14 }} role="group" aria-label={`${t.title}: ${TAG_LABEL[t.tag.tag]}, ${t.line}`}>
+          <div key={t.title} className="card" style={{ padding: 14 }} role="group" aria-label={`${t.title}: ${TAG_LABEL[t.tag.tag]}, ${t.line}, ${t.sub}${t.warn ? `, ${t.warn}` : ''}`}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {t.tag.tag !== 'none' && <Mark def={VERDICT_MARK[t.tag.tag]} size={34} />}
               <div style={{ minWidth: 0 }}>
@@ -127,6 +129,7 @@ function WeekResult({ w }: { w: WeekStats }) {
             </div>
             <div className="num" style={{ fontSize: 14, fontWeight: 600, marginTop: 10 }}>{t.line}</div>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{t.sub}</div>
+            {t.warn && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>{t.warn}</div>}
           </div>
         ))}
       </div>
@@ -210,8 +213,8 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
           // actual average under the big %, the goal apart below it
           sub: `${Math.round(avgM[k])} g`,
           goal: targets.has ? `${targets.pct[k]}%` + (targets.g[k] ? ` · ${targets.g[k]} g` : '') : undefined,
-          tag: pt ? pt.tag : balanceTag(k, actual[k], targets.pct[k], actual.kcal > 0),
-          tagLabel: pt?.label
+          // protein shows its week verdict as a word, like fat and carbs; the counts are in the marks under the chart
+          tag: pt ? pt.tag : balanceTag(k, actual[k], targets.pct[k], actual.kcal > 0)
         }
       ];
     })
@@ -260,27 +263,16 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
         <div style={{ marginTop: 14 }}>
           <MacroCards data={cards} showTags={targets.has || !!proteinVerdict} />
         </div>
-        {now.proteinLowest && (
-          <div className="secondary" style={{ fontSize: 13, marginTop: 10 }}>
-            Protein: {now.proteinMet} reached · {now.proteinClose} almost · {now.proteinShort} low {now.proteinShort === 1 ? 'day' : 'days'} · lowest{' '}
-            {Math.round(now.proteinLowest.g)} g
-          </div>
-        )}
-
-        <div style={{ marginTop: 28, background: '#fff', borderRadius: 20, padding: '20px 16px 14px', position: 'relative' }}>
-          {hasGoal && (
-            <>
-              <div style={{ position: 'absolute', left: 16, right: 16, top: 60 + goalTop, borderTop: '1px dashed var(--dash)' }} />
-              <div style={{ position: 'absolute', right: 16, top: 60 + goalTop - 15, fontSize: 11, color: 'var(--faint)' }}>goal {fmt(s.goal)}</div>
-            </>
+        <div style={{ marginTop: 28, background: '#fff', borderRadius: 20, padding: `${CHART_TOP}px 16px 14px`, position: 'relative' }}>
+          {/* the lines' key sits above the chart, so it never meets the numbers over the bars */}
+          {(hasGoal || min > 0) && (
+            <div style={{ position: 'absolute', left: 16, top: 14, display: 'flex', gap: 14, fontSize: 11, color: 'var(--faint)' }}>
+              {hasGoal && <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, borderTop: '1px dashed var(--dash)' }} />goal {fmt(s.goal)}</span>}
+              {min > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, borderTop: '2px dotted var(--dash)' }} />min {fmt(min)}</span>}
+            </div>
           )}
-          {min > 0 && (
-            <>
-              <div style={{ position: 'absolute', left: 16, right: 16, top: 60 + minTop, borderTop: '1px dashed var(--dash)' }} />
-              {/* under its line, so it never meets the goal label, which sits above the goal line */}
-              <div style={{ position: 'absolute', right: 16, top: 60 + minTop + 2, fontSize: 11, color: 'var(--faint)' }}>min {fmt(min)}</div>
-            </>
-          )}
+          {hasGoal && <div style={{ position: 'absolute', left: 16, right: 16, top: CHART_TOP + 40 + goalTop, borderTop: '1px dashed var(--dash)' }} />}
+          {min > 0 && <div style={{ position: 'absolute', left: 16, right: 16, top: CHART_TOP + 40 + minTop, borderTop: '2px dotted var(--dash)' }} />}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, alignItems: 'end', height: 160 }}>
             {totals.map(x => {
               const has = x.d <= today && x.t.kcal > 0;
