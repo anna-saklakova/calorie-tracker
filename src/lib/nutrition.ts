@@ -166,7 +166,7 @@ export function goalsOn(s: Settings, date: string): Goals {
 
 export type KcalStatus = 'none' | 'under' | 'within' | 'over' | 'way_over';
 /**
- * Within ±10 % of the goal, 10–20 % over, or more than 20 % over (the bands of kcalZone). A finished
+ * Up to 5 % over the goal, 5–15 % over, or more than 15 % over (the bands of kcalZone). A finished
  * day (`dayDone`) that stayed below the minimum is 'under'; a day still in progress is never judged as under.
  */
 export function kcalStatus(kcal: number, goal: number, min = 0, dayDone = true): KcalStatus {
@@ -178,15 +178,15 @@ export function kcalStatus(kcal: number, goal: number, min = 0, dayDone = true):
 }
 export const KCAL_COLOR: Record<KcalStatus, string> = { none: '#F3E6DF', under: 'var(--est)', within: 'var(--accent)', over: 'var(--est)', way_over: 'var(--danger)' };
 
-/** How far a day may stray from the calorie goal: ±10 % is ideal, ±20 % is fine, beyond that is the red zone. */
-export const KCAL_ZONE = { ideal: 0.1, ok: 0.2 } as const;
-/** The goal moved by a share, rounded to whole kcal: kcalBound(1900, 0.1) = 2090, kcalBound(1900, -0.1) = 1710. */
+/** How far a day may stray from the calorie goal: within ±5 % it's reached, within ±15 % almost, beyond that not reached. */
+export const KCAL_ZONE = { ideal: 0.05, ok: 0.15 } as const;
+/** The goal moved by a share, rounded to whole kcal: kcalBound(1900, 0.05) = 1995, kcalBound(1900, -0.05) = 1805. */
 export const kcalBound = (goal: number, share: number) => Math.round(goal * (1 + share));
 
 export type KcalZone = 'none' | 'ideal' | 'low' | 'high' | 'too_low' | 'too_high';
 /**
- * A day's calories against its goal: ideal within 90–110 %, low 80–90 % or high 110–120 % (fine now and
- * then), too low below 80 % (recovery and muscle suffer) or too high above 120 % (wipes out the week's deficit).
+ * A day's calories against its goal: reached within 95–105 % (green), almost at 85–95 % or 105–115 %
+ * (yellow), not reached below 85 % or above 115 % (red).
  */
 export function kcalZone(kcal: number, goal: number): KcalZone {
   if (kcal <= 0 || goal <= 0) return 'none';
@@ -199,7 +199,7 @@ export function kcalZone(kcal: number, goal: number): KcalZone {
 
 /**
  * Calories split for drawing: the part up to the goal is always green; only the part over it
- * takes the over colour (yellow up to 10 % over, red beyond). Without a goal it's all `within`.
+ * takes the over colour (green up to 5 % over, yellow up to 15 %, red beyond). Without a goal it's all `within`.
  */
 export function kcalParts(kcal: number, goal: number): { within: number; over: number; overColor: string } {
   const status = kcalStatus(kcal, goal);

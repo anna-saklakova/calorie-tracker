@@ -219,17 +219,7 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
         <div style={{ marginTop: 14 }}>
           <ProteinPanel protein={tot.p} pg={proteinGoal(s)} kcal={tot.kcal} goal={s.goal} />
         </div>
-        {showWeighIn ? (
-          <WeighInRow key={date} data={data} date={date} />
-        ) : (
-          date <= today && (
-            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="pill-btn" onClick={() => setWeighOpenOn(date)}>
-                + Weigh-in
-              </button>
-            </div>
-          )
-        )}
+        {showWeighIn && <WeighInRow key={date} data={data} date={date} />}
 
         {!meals.length && (
           <div style={{ marginTop: 72, textAlign: 'center', padding: '0 24px' }}>
@@ -252,6 +242,15 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
             </div>
           </section>
         ))}
+
+        {/* not due: out of the way, under the meals */}
+        {!showWeighIn && date <= today && (
+          <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}>
+            <button className="pill-btn" onClick={() => setWeighOpenOn(date)}>
+              + Weigh-in
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

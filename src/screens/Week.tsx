@@ -19,6 +19,8 @@ interface Props {
 }
 
 const H = 120;
+/** room above the bars for the key of the goal and minimum lines */
+const CHART_TOP = 34;
 
 type Summary = WeekStats;
 
@@ -36,7 +38,7 @@ function Compare({ now, prev, goal, isCurrent }: { now: Summary; prev: Summary; 
     { label: 'Protein', value: `${Math.round(now.protein)} g`, change: `${arrow(Math.round(now.protein - prev.protein))} ${Math.abs(Math.round(now.protein - prev.protein))} g`, color: tone(Math.round(now.protein - prev.protein)), before: `${Math.round(prev.protein)} g` }
   ];
   rows.push({ label: 'Days logged', value: `${now.days} of ${now.past}`, change: '', color: tone(now.days / now.past - prev.days / prev.past), before: `${prev.days} of ${prev.past}` });
-  if (now.goalDays && prev.goalDays) rows.push({ label: 'Calories in range', value: `${now.kcalInRange} of ${now.goalDays} days`, change: '', color: tone(now.kcalInRange / now.goalDays - prev.kcalInRange / prev.goalDays), before: `${prev.kcalInRange} of ${prev.goalDays}` });
+  if (now.goalDays && prev.goalDays) rows.push({ label: 'Calorie goal reached', value: `${now.kcalGreen} of ${now.goalDays} days`, change: '', color: tone(now.kcalGreen / now.goalDays - prev.kcalGreen / prev.goalDays), before: `${prev.kcalGreen} of ${prev.goalDays}` });
   const okDays = (w: Summary) => w.proteinMet + w.proteinClose;
   if (now.proteinDays && prev.proteinDays) rows.push({ label: 'Protein reached or almost', value: `${okDays(now)} of ${now.proteinDays} days`, change: '', color: tone(okDays(now) / now.proteinDays - okDays(prev) / prev.proteinDays), before: `${okDays(prev)} of ${prev.proteinDays}` });
   return (
@@ -68,11 +70,11 @@ const PROTEIN_MARK: Record<Exclude<ProteinStatus, 'none'>, MarkDef> = {
   short: ['✕', 'var(--danger)', 'protein not reached']
 };
 const KCAL_MARK: Record<Exclude<KcalZone, 'none'>, MarkDef> = {
-  ideal: ['✓', 'var(--accent)', 'calories within 10 % of the goal'],
-  low: ['↓', 'var(--est)', 'calories 10–20 % under the goal'],
-  high: ['↑', 'var(--est)', 'calories 10–20 % over the goal'],
-  too_low: ['↓', 'var(--danger)', 'calories more than 20 % under the goal'],
-  too_high: ['↑', 'var(--danger)', 'calories more than 20 % over the goal']
+  ideal: ['✓', 'var(--accent)', 'calorie goal reached, within 5 %'],
+  low: ['↓', 'var(--est)', 'calories 5–15 % under the goal'],
+  high: ['↑', 'var(--est)', 'calories 5–15 % over the goal'],
+  too_low: ['↓', 'var(--danger)', 'calories more than 15 % under the goal'],
+  too_high: ['↑', 'var(--danger)', 'calories more than 15 % over the goal']
 };
 const VERDICT_MARK: Record<Exclude<BalanceTag, 'none'>, [string, string]> = { on: ['✓', 'var(--accent)'], ok: ['~', 'var(--est)'], off: ['✕', 'var(--danger)'] };
 
@@ -102,19 +104,22 @@ function MarkRow<K extends string>({ title, days, mark }: { title: string; days:
 
 /** The verdict of a finished week, for calories and protein side by side. */
 function WeekResult({ w }: { w: WeekStats }) {
-  const tiles: { title: string; tag: { tag: BalanceTag; label: string }; sub: string }[] = [];
+  const tiles: { title: string; tag: { tag: BalanceTag; label: string }; line: string; sub: string; warn?: string }[] = [];
   if (w.goalDays) {
-    const out = w.goalDays - w.kcalInRange;
-    tiles.push({ title: 'Calories', tag: kcalWeekTag(w), sub: [`${out} ${out === 1 ? 'day' : 'days'} outside 85–115 %`, w.kcalBinge ? `${w.kcalBinge} over 130 %` : ''].filter(Boolean).join(' · ') });
+    const t = kcalWeekTag(w);
+    tiles.push({ title: 'Calories', tag: t, line: `${w.kcalGreen} of ${w.goalDays} on goal`, sub: `${w.kcalYellow} almost · ${w.kcalRed} off`, warn: w.kcalBinge ? `${w.kcalBinge} over 130 %` : '' });
   }
-  if (w.proteinDays) tiles.push({ title: 'Protein', tag: proteinWeekTag(w), sub: `${w.proteinShort} low ${w.proteinShort === 1 ? 'day' : 'days'}` });
+  if (w.proteinDays) {
+    const t = proteinWeekTag(w);
+    tiles.push({ title: 'Protein', tag: t, line: `${w.proteinMet} of ${w.proteinDays} reached`, sub: `${w.proteinClose} almost · ${w.proteinShort} low` });
+  }
   if (!tiles.length) return null;
   return (
     <section style={{ marginTop: 22 }}>
       <div className="label" style={{ padding: '0 4px 10px' }}>Week result</div>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tiles.length},1fr)`, gap: 8 }}>
         {tiles.map(t => (
-          <div key={t.title} className="card" style={{ padding: 14 }} role="group" aria-label={`${t.title}: ${TAG_LABEL[t.tag.tag]}, ${t.tag.label}`}>
+          <div key={t.title} className="card" style={{ padding: 14 }} role="group" aria-label={`${t.title}: ${TAG_LABEL[t.tag.tag]}, ${t.line}, ${t.sub}${t.warn ? `, ${t.warn}` : ''}`}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {t.tag.tag !== 'none' && <Mark def={VERDICT_MARK[t.tag.tag]} size={34} />}
               <div style={{ minWidth: 0 }}>
@@ -122,8 +127,9 @@ function WeekResult({ w }: { w: WeekStats }) {
                 <div style={{ fontSize: 16, fontWeight: 700 }}>{TAG_LABEL[t.tag.tag]}</div>
               </div>
             </div>
-            <div className="num" style={{ fontSize: 14, fontWeight: 600, marginTop: 10 }}>{t.tag.label} in range</div>
+            <div className="num" style={{ fontSize: 14, fontWeight: 600, marginTop: 10 }}>{t.line}</div>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{t.sub}</div>
+            {t.warn && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>{t.warn}</div>}
           </div>
         ))}
       </div>
@@ -207,8 +213,8 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
           // actual average under the big %, the goal apart below it
           sub: `${Math.round(avgM[k])} g`,
           goal: targets.has ? `${targets.pct[k]}%` + (targets.g[k] ? ` · ${targets.g[k]} g` : '') : undefined,
-          tag: pt ? pt.tag : balanceTag(k, actual[k], targets.pct[k], actual.kcal > 0),
-          tagLabel: pt?.label
+          // protein shows its week verdict as a word, like fat and carbs; the counts are in the marks under the chart
+          tag: pt ? pt.tag : balanceTag(k, actual[k], targets.pct[k], actual.kcal > 0)
         }
       ];
     })
@@ -257,27 +263,16 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
         <div style={{ marginTop: 14 }}>
           <MacroCards data={cards} showTags={targets.has || !!proteinVerdict} />
         </div>
-        {now.proteinLowest && (
-          <div className="secondary" style={{ fontSize: 13, marginTop: 10 }}>
-            Protein: {now.proteinMet} reached · {now.proteinClose} almost · {now.proteinShort} low {now.proteinShort === 1 ? 'day' : 'days'} · lowest{' '}
-            {Math.round(now.proteinLowest.g)} g
-          </div>
-        )}
-
-        <div style={{ marginTop: 28, background: '#fff', borderRadius: 20, padding: '20px 16px 14px', position: 'relative' }}>
-          {hasGoal && (
-            <>
-              <div style={{ position: 'absolute', left: 16, right: 16, top: 60 + goalTop, borderTop: '1px dashed var(--dash)' }} />
-              <div style={{ position: 'absolute', right: 16, top: 60 + goalTop - 15, fontSize: 11, color: 'var(--faint)' }}>goal {fmt(s.goal)}</div>
-            </>
+        <div style={{ marginTop: 28, background: '#fff', borderRadius: 20, padding: `${CHART_TOP}px 16px 14px`, position: 'relative' }}>
+          {/* the lines' key sits above the chart, so it never meets the numbers over the bars */}
+          {(hasGoal || min > 0) && (
+            <div style={{ position: 'absolute', left: 16, top: 14, display: 'flex', gap: 14, fontSize: 11, color: 'var(--faint)' }}>
+              {hasGoal && <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, borderTop: '1px dashed var(--dash)' }} />goal {fmt(s.goal)}</span>}
+              {min > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, borderTop: '2px dotted var(--dash)' }} />min {fmt(min)}</span>}
+            </div>
           )}
-          {min > 0 && (
-            <>
-              <div style={{ position: 'absolute', left: 16, right: 16, top: 60 + minTop, borderTop: '1px dashed var(--dash)' }} />
-              {/* under its line, so it never meets the goal label, which sits above the goal line */}
-              <div style={{ position: 'absolute', right: 16, top: 60 + minTop + 2, fontSize: 11, color: 'var(--faint)' }}>min {fmt(min)}</div>
-            </>
-          )}
+          {hasGoal && <div style={{ position: 'absolute', left: 16, right: 16, top: CHART_TOP + 40 + goalTop, borderTop: '1px dashed var(--dash)' }} />}
+          {min > 0 && <div style={{ position: 'absolute', left: 16, right: 16, top: CHART_TOP + 40 + minTop, borderTop: '2px dotted var(--dash)' }} />}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, alignItems: 'end', height: 160 }}>
             {totals.map(x => {
               const has = x.d <= today && x.t.kcal > 0;
@@ -323,7 +318,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
               mark={KCAL_MARK}
               days={totals.map(x => {
                 const raw = x.d <= today ? kcalZone(x.t.kcal, x.goals.goal) : 'none';
-                // today isn't over: only a day already more than 20 % over is settled
+                // today isn't over: only a day already more than 15 % over is settled
                 return { d: x.d, st: x.d === today && raw !== 'too_high' ? 'none' : raw, note: `${fmt(x.t.kcal)} of ${fmt(x.goals.goal)} kcal` };
               })}
             />
