@@ -62,23 +62,25 @@ describe('protein week by the 80 / 20 rule', () => {
 });
 
 describe('calorie week', () => {
-  it('counts the days within 85–115 % and those over 130 %', () => {
-    // goal 2000: in range 1700–2300, over 130 % above 2600
+  it('counts the days by colour and those over 130 %', () => {
+    // goal 2000: green 1900–2100, yellow 1700–2300, over 130 % above 2600
     const days: Record<string, Day> = {};
-    [2000, 1700, 2300, 1699, 2301, 2700, 2000].forEach((k, i) => (days[shift(WS, i)] = day(k)));
+    [2000, 1900, 2100, 1899, 2300, 2700, 1600].forEach((k, i) => (days[shift(WS, i)] = day(k)));
     const w = weekStats(withDays(days, { goal: 2000 }), WS, shift(WS, 7));
-    expect(w).toMatchObject({ kcalInRange: 4, kcalBinge: 1, goalDays: 7 });
-    expect(kcalWeekTag(w)).toEqual({ tag: 'ok', label: '4 of 7 days' });
+    expect(w).toMatchObject({ kcalGreen: 3, kcalYellow: 2, kcalRed: 2, kcalBinge: 1, goalDays: 7 });
+    expect(kcalWeekTag(w)).toEqual({ tag: 'ok', label: '3 of 7 days' });
   });
 
-  it('is on track with at most two days out and none over 130 %', () => {
-    const w = (inRange: number, binge: number, days = 7) => kcalWeekTag({ kcalInRange: inRange, kcalBinge: binge, goalDays: days });
-    expect(w(7, 0).tag).toBe('on');
-    expect(w(5, 0).tag).toBe('on');
-    expect(w(6, 1).tag).toBe('ok');
-    expect(w(4, 0).tag).toBe('ok');
-    expect(w(3, 0).tag).toBe('off');
-    expect(w(5, 2).tag).toBe('off');
+  it('is on track with half the days green, at most 2 red and no binge', () => {
+    const w = (green: number, red: number, binge = 0, days = 7) => kcalWeekTag({ kcalGreen: green, kcalRed: red, kcalBinge: binge, goalDays: days }).tag;
+    expect(w(7, 0)).toBe('on');
+    expect(w(4, 2)).toBe('on');
+    expect(w(2, 1, 0, 4)).toBe('on'); // half of a partial week
+    expect(w(3, 0)).toBe('ok'); // mostly yellow: almost
+    expect(w(4, 3)).toBe('ok');
+    expect(w(5, 1, 1)).toBe('ok');
+    expect(w(3, 4)).toBe('off');
+    expect(w(5, 2, 2)).toBe('off');
   });
 });
 

@@ -36,7 +36,7 @@ function Compare({ now, prev, goal, isCurrent }: { now: Summary; prev: Summary; 
     { label: 'Protein', value: `${Math.round(now.protein)} g`, change: `${arrow(Math.round(now.protein - prev.protein))} ${Math.abs(Math.round(now.protein - prev.protein))} g`, color: tone(Math.round(now.protein - prev.protein)), before: `${Math.round(prev.protein)} g` }
   ];
   rows.push({ label: 'Days logged', value: `${now.days} of ${now.past}`, change: '', color: tone(now.days / now.past - prev.days / prev.past), before: `${prev.days} of ${prev.past}` });
-  if (now.goalDays && prev.goalDays) rows.push({ label: 'Calories in range', value: `${now.kcalInRange} of ${now.goalDays} days`, change: '', color: tone(now.kcalInRange / now.goalDays - prev.kcalInRange / prev.goalDays), before: `${prev.kcalInRange} of ${prev.goalDays}` });
+  if (now.goalDays && prev.goalDays) rows.push({ label: 'Calorie goal reached', value: `${now.kcalGreen} of ${now.goalDays} days`, change: '', color: tone(now.kcalGreen / now.goalDays - prev.kcalGreen / prev.goalDays), before: `${prev.kcalGreen} of ${prev.goalDays}` });
   const okDays = (w: Summary) => w.proteinMet + w.proteinClose;
   if (now.proteinDays && prev.proteinDays) rows.push({ label: 'Protein reached or almost', value: `${okDays(now)} of ${now.proteinDays} days`, change: '', color: tone(okDays(now) / now.proteinDays - okDays(prev) / prev.proteinDays), before: `${okDays(prev)} of ${prev.proteinDays}` });
   return (
@@ -68,11 +68,11 @@ const PROTEIN_MARK: Record<Exclude<ProteinStatus, 'none'>, MarkDef> = {
   short: ['✕', 'var(--danger)', 'protein not reached']
 };
 const KCAL_MARK: Record<Exclude<KcalZone, 'none'>, MarkDef> = {
-  ideal: ['✓', 'var(--accent)', 'calories within 10 % of the goal'],
-  low: ['↓', 'var(--est)', 'calories 10–20 % under the goal'],
-  high: ['↑', 'var(--est)', 'calories 10–20 % over the goal'],
-  too_low: ['↓', 'var(--danger)', 'calories more than 20 % under the goal'],
-  too_high: ['↑', 'var(--danger)', 'calories more than 20 % over the goal']
+  ideal: ['✓', 'var(--accent)', 'calorie goal reached, within 5 %'],
+  low: ['↓', 'var(--est)', 'calories 5–15 % under the goal'],
+  high: ['↑', 'var(--est)', 'calories 5–15 % over the goal'],
+  too_low: ['↓', 'var(--danger)', 'calories more than 15 % under the goal'],
+  too_high: ['↑', 'var(--danger)', 'calories more than 15 % over the goal']
 };
 const VERDICT_MARK: Record<Exclude<BalanceTag, 'none'>, [string, string]> = { on: ['✓', 'var(--accent)'], ok: ['~', 'var(--est)'], off: ['✕', 'var(--danger)'] };
 
@@ -102,19 +102,22 @@ function MarkRow<K extends string>({ title, days, mark }: { title: string; days:
 
 /** The verdict of a finished week, for calories and protein side by side. */
 function WeekResult({ w }: { w: WeekStats }) {
-  const tiles: { title: string; tag: { tag: BalanceTag; label: string }; sub: string }[] = [];
+  const tiles: { title: string; tag: { tag: BalanceTag; label: string }; line: string; sub: string }[] = [];
   if (w.goalDays) {
-    const out = w.goalDays - w.kcalInRange;
-    tiles.push({ title: 'Calories', tag: kcalWeekTag(w), sub: [`${out} ${out === 1 ? 'day' : 'days'} outside 85–115 %`, w.kcalBinge ? `${w.kcalBinge} over 130 %` : ''].filter(Boolean).join(' · ') });
+    const t = kcalWeekTag(w);
+    tiles.push({ title: 'Calories', tag: t, line: `${t.label} on goal`, sub: [`${w.kcalYellow} almost · ${w.kcalRed} off`, w.kcalBinge ? `${w.kcalBinge} over 130 %` : ''].filter(Boolean).join(' · ') });
   }
-  if (w.proteinDays) tiles.push({ title: 'Protein', tag: proteinWeekTag(w), sub: `${w.proteinShort} low ${w.proteinShort === 1 ? 'day' : 'days'}` });
+  if (w.proteinDays) {
+    const t = proteinWeekTag(w);
+    tiles.push({ title: 'Protein', tag: t, line: `${t.label} reached or almost`, sub: `${w.proteinShort} low ${w.proteinShort === 1 ? 'day' : 'days'}` });
+  }
   if (!tiles.length) return null;
   return (
     <section style={{ marginTop: 22 }}>
       <div className="label" style={{ padding: '0 4px 10px' }}>Week result</div>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tiles.length},1fr)`, gap: 8 }}>
         {tiles.map(t => (
-          <div key={t.title} className="card" style={{ padding: 14 }} role="group" aria-label={`${t.title}: ${TAG_LABEL[t.tag.tag]}, ${t.tag.label}`}>
+          <div key={t.title} className="card" style={{ padding: 14 }} role="group" aria-label={`${t.title}: ${TAG_LABEL[t.tag.tag]}, ${t.line}`}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {t.tag.tag !== 'none' && <Mark def={VERDICT_MARK[t.tag.tag]} size={34} />}
               <div style={{ minWidth: 0 }}>
@@ -122,7 +125,7 @@ function WeekResult({ w }: { w: WeekStats }) {
                 <div style={{ fontSize: 16, fontWeight: 700 }}>{TAG_LABEL[t.tag.tag]}</div>
               </div>
             </div>
-            <div className="num" style={{ fontSize: 14, fontWeight: 600, marginTop: 10 }}>{t.tag.label} in range</div>
+            <div className="num" style={{ fontSize: 14, fontWeight: 600, marginTop: 10 }}>{t.line}</div>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{t.sub}</div>
           </div>
         ))}
@@ -323,7 +326,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
               mark={KCAL_MARK}
               days={totals.map(x => {
                 const raw = x.d <= today ? kcalZone(x.t.kcal, x.goals.goal) : 'none';
-                // today isn't over: only a day already more than 20 % over is settled
+                // today isn't over: only a day already more than 15 % over is settled
                 return { d: x.d, st: x.d === today && raw !== 'too_high' ? 'none' : raw, note: `${fmt(x.t.kcal)} of ${fmt(x.goals.goal)} kcal` };
               })}
             />
