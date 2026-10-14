@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { ChevronLeft, ChevronRight } from '../components/icons';
 import { Segmented, NumInput } from '../components/ui';
-import { dayLabel, MON, parse, shift, WD } from '../lib/dates';
-import { bodyInsights, checkInDue, checkIns } from '../lib/body';
+import { dayLabel, iso, MON, parse, shift } from '../lib/dates';
+import { BODY, bodyInsights, checkInDue, checkIns } from '../lib/body';
 import type { Insight, Tone } from '../lib/body';
 import { fmt, goalsOn } from '../lib/nutrition';
 import { setWaist, setWeighIn } from '../lib/store';
@@ -20,14 +21,72 @@ const shortDate = (d: string) => `${parse(d).getDate()} ${MON[parse(d).getMonth(
 const signed = (n: number, digits = 1) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(digits)}`;
 const toNum = (v: string) => Math.max(0, Math.round((+v || 0) * 10) / 10);
 
-/** The check-in form: today by default, any earlier day by the strip or the calendar. */
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const WEEK_HEAD = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+
+/**
+ * A month calendar: days with a check-in are filled, with the weight under the date, so past check-ins
+ * are seen at a glance; tap one to open it, or any other past day to add one.
+ */
+function MonthCalendar({ data, today, value, onPick }: { data: Data; today: string; value: string; onPick: (d: string) => void }) {
+  const [month, setMonth] = useState(value.slice(0, 7) + '-01');
+  const first = parse(month);
+  const lead = (first.getDay() + 6) % 7;
+  const len = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  const cells = [...Array.from({ length: lead }, () => null), ...Array.from({ length: len }, (_, i) => shift(month, i))];
+  const go = (n: number) => setMonth(m => { const d = parse(m); return iso(new Date(d.getFullYear(), d.getMonth() + n, 1)); });
+  const isLast = month.slice(0, 7) >= today.slice(0, 7);
+  const count = cells.filter(d => d && ((data.days[d]?.weight ?? 0) > 0 || (data.days[d]?.waist ?? 0) > 0)).length;
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button className="icon-btn" aria-label="Previous month" onClick={() => go(-1)}><ChevronLeft /></button>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>{MONTHS[first.getMonth()]} {first.getFullYear()}</div>
+          <div style={{ fontSize: 12, color: 'var(--muted)' }}>{count ? `${count} ${count === 1 ? 'check-in' : 'check-ins'}` : 'no check-ins'}</div>
+        </div>
+        <button className="icon-btn" aria-label="Next month" disabled={isLast} onClick={() => go(1)}><ChevronRight /></button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginTop: 8 }}>
+        {WEEK_HEAD.map(h => <span key={h} style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: 'var(--faint)' }}>{h}</span>)}
+        {cells.map((d, i) => {
+          if (!d) return <span key={'e' + i} />;
+          const day = data.days[d];
+          const kg = day?.weight ?? 0;
+          const has = kg > 0 || (day?.waist ?? 0) > 0;
+          const on = d === value;
+          const future = d > today;
+          return (
+            <button
+              key={d}
+              disabled={future}
+              onClick={() => onPick(d)}
+              aria-pressed={on}
+              aria-label={`${dayLabel(d, today)}${has ? `, check-in${kg ? ` ${kg.toFixed(1)} kg` : ''}` : ''}`}
+              style={{
+                height: 46, borderRadius: 12, padding: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
+                border: on ? '2px solid var(--ink)' : '1px solid transparent',
+                background: has ? 'var(--accent)' : 'transparent',
+                color: has ? '#fff' : future ? 'var(--disabled)' : 'var(--ink)'
+              }}
+            >
+              <span className="num" style={{ fontSize: 14, fontWeight: d === today || has ? 700 : 500, textDecoration: d === today && !has ? 'underline' : undefined }}>{parse(d).getDate()}</span>
+              {has && <span className="num" style={{ fontSize: 9.5, fontWeight: 600, opacity: 0.9 }}>{kg ? kg.toFixed(1) : 'waist'}</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** The check-in form: today by default, any earlier day from the calendar. */
 function CheckInForm({ data, today, date, setDate, onSaved }: { data: Data; today: string; date: string; setDate: (d: string) => void; onSaved: (msg: string) => void }) {
   const day = data.days[date];
   const [kg, setKg] = useState(day?.weight ? String(day.weight) : '');
   const [cm, setCm] = useState(day?.waist ? String(day.waist) : '');
   const had = (day?.weight ?? 0) > 0 || (day?.waist ?? 0) > 0;
   const changed = toNum(kg) !== (day?.weight ?? 0) || toNum(cm) !== (day?.waist ?? 0);
-  const strip = Array.from({ length: 7 }, (_, i) => shift(today, i - 6));
   const save = () => {
     setWeighIn(date, toNum(kg));
     setWaist(date, toNum(cm));
@@ -35,26 +94,12 @@ function CheckInForm({ data, today, date, setDate, onSaved }: { data: Data; toda
   };
   return (
     <div className="card" style={{ padding: 16 }}>
-      <div className="strip" style={{ gap: 6 }}>
-        {strip.map(d => {
-          const x = parse(d);
-          const has = (data.days[d]?.weight ?? 0) > 0 || (data.days[d]?.waist ?? 0) > 0;
-          return (
-            <button key={d} className={`strip-day${d === date ? ' on' : ''}`} style={{ flex: 1, width: 'auto', minWidth: 0 }} onClick={() => setDate(d)} aria-label={`${dayLabel(d, today)}${has ? ', has a check-in' : ''}`}>
-              <span>{WD[x.getDay()]}</span>
-              <span style={{ position: 'relative' }}>
-                {x.getDate()}
-                {/* a day that already has a check-in */}
-                {has && <span aria-hidden style={{ position: 'absolute', left: '50%', top: '100%', width: 4, height: 4, marginLeft: -2, borderRadius: '50%', background: d === date ? '#fff' : 'var(--accent)' }} />}
-              </span>
-            </button>
-          );
-        })}
+      <MonthCalendar data={data} today={today} value={date} onPick={setDate} />
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--line-soft)' }}>
+        <span style={{ fontSize: 15, fontWeight: 700 }}>{dayLabel(date, today)}</span>
+        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{had ? 'edit this check-in' : 'new check-in'}</span>
+        {date !== today && <button className="pill-btn" style={{ marginLeft: 'auto' }} onClick={() => setDate(today)}>Today</button>}
       </div>
-      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 10, fontSize: 13, color: 'var(--muted)' }}>
-        {strip.includes(date) ? 'Another day' : dayLabel(date, today)}
-        <input type="date" max={today} value={date} onChange={e => e.target.value && e.target.value <= today && setDate(e.target.value)} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: '4px 8px', background: 'var(--bg)', color: 'var(--ink)', font: 'inherit', fontSize: 13 }} />
-      </label>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
         {[
           { label: 'Weight', unit: 'kg', value: kg, set: setKg },
@@ -246,7 +291,8 @@ export function Body({ data, today, onSaved }: Props) {
             <div className="label" style={{ padding: '0 4px 10px' }}>History</div>
             <div className="card">
               {(allRows ? list : list.slice(0, 6)).map(c => {
-                const older = list[list.indexOf(c) + 1];
+                // the change against the check-in at least 6 days before: over fewer days it's water, not worth a number
+                const older = list.find(o => o.weight && dayNo(c.date) - dayNo(o.date) >= BODY.minSpan);
                 const dKg = c.weight && older?.weight ? c.weight - older.weight : null;
                 return (
                   <button
@@ -264,7 +310,7 @@ export function Body({ data, today, onSaved }: Props) {
                     </div>
                     <div style={{ textAlign: 'right', flex: 'none' }}>
                       <div className="num" style={{ fontSize: 16, fontWeight: 600 }}>{c.weight ? `${c.weight.toFixed(1)} kg` : '—'}</div>
-                      {dKg !== null && <div className="num" style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{signed(dKg)} kg</div>}
+                      {dKg !== null && <div className="num" style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{signed(dKg)} kg in {dayNo(c.date) - dayNo(older!.date)} d</div>}
                     </div>
                   </button>
                 );

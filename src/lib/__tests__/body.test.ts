@@ -60,7 +60,37 @@ describe('body insights', () => {
     expect(water?.text).toMatch(/Carbs ran \d+ % above/);
   });
 
-  it('warns about fast loss and low protein for the body weight', () => {
+  it('does not read a change over a day or two, only week to week', () => {
+    // two check-ins a day apart: nothing to read yet
+    const two = weeks([80]);
+    two.days[shift(WS, 1)] = day({ kcal: 2000, p: 140 }, 79);
+    const ins = bodyInsights(two, shift(WS, 1), 10);
+    expect(ins.find(i => i.key === 'too_soon')?.title).toMatch(/1 day: too soon to read/);
+    expect(ins.map(i => i.key)).not.toContain('vs_goal');
+    // a day after a weekly series: read against the check-in 8 days before, not the one of yesterday
+    const data = weeks([80, 79.5, 79, 78.5, 78]);
+    const next = shift(last(5), 1);
+    data.days[next] = day({ kcal: 2000, p: 140 }, 77);
+    const b = bodyInsights(data, next, 10).find(i => ['balance', 'water', 'whoosh'].includes(i.key));
+    expect(b?.title).toMatch(/over 8 days/);
+  });
+
+  it('compares the latest check-in with the one at least 6 days earlier, skipping closer ones', () => {
+    const data = weeks([80, 79.5, 79, 78.5, 78]);
+    data.days[shift(last(5), -2)] = { ...data.days[shift(last(5), -2)], weight: 76.5 };
+    const b = bodyInsights(data, last(5), 10).find(i => i.key === 'balance' || i.key === 'water' || i.key === 'whoosh');
+    expect(b?.title).toMatch(/over 7 days/);
+  });
+
+  it('judges protein against the target set in Settings', () => {
+    const data = weeks([80, 79.5, 79], () => ({ kcal: 2000, p: 140 }));
+    const ok = bodyInsights({ ...data, settings: { ...data.settings, proteinMet: 130, proteinClose: 110 } }, last(3), 10).find(i => i.key === 'protein')!;
+    expect(ok).toMatchObject({ tone: 'good', title: 'Protein 140 g a day, target 130 g' });
+    const low = bodyInsights({ ...data, settings: { ...data.settings, proteinMet: 170, proteinClose: 150 } }, last(3), 10).find(i => i.key === 'protein')!;
+    expect(low).toMatchObject({ tone: 'warn', title: 'Protein 140 g a day, target 170 g' });
+  });
+
+  it('warns about fast loss and low protein', () => {
     const k = keys(weeks([80, 78.8, 77.6, 76.4], () => ({ kcal: 1500, p: 80 })), last(4));
     expect(k).toContain('fast');
     expect(k).toContain('protein');
