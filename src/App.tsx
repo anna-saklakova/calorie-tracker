@@ -8,6 +8,7 @@ import { defaultMeal, mealLabels, perGram, r1, scaleItem } from './lib/nutrition
 import { loadPhoto } from './lib/images';
 import { newReviewItem, recognize } from './lib/recognize';
 import type { Attempt } from './lib/recognize';
+import { checkInDue } from './lib/body';
 import { saveExample } from './lib/dataset';
 import * as store from './lib/store';
 import { useData } from './lib/store';
@@ -17,6 +18,7 @@ import { useVoiceNote } from './lib/voice';
 import { uid } from './lib/types';
 import type { Item, Meal, MealType, Photo, PhotoKind, Product, ReviewItem } from './lib/types';
 import { AddMeal } from './screens/AddMeal';
+import { Body } from './screens/Body';
 import { Analyzing, emptyManual, Failed, failureDetail, Manual, Review } from './screens/Flow';
 import type { ManualForm } from './screens/Flow';
 import { Library } from './screens/Library';
@@ -25,8 +27,8 @@ import { AuthState, SetPassword, SignIn } from './screens/SignIn';
 import { Today } from './screens/Today';
 import { Week } from './screens/Week';
 
-type Screen = 'today' | 'add' | 'analyzing' | 'review' | 'failed' | 'manual' | 'library' | 'week' | 'settings' | 'password';
-const TABS: [Screen, string][] = [['today', 'Today'], ['week', 'Week'], ['library', 'Library']];
+type Screen = 'today' | 'add' | 'analyzing' | 'review' | 'failed' | 'manual' | 'library' | 'week' | 'body' | 'settings' | 'password';
+const TABS: [Screen, string][] = [['today', 'Today'], ['week', 'Week'], ['body', 'Body'], ['library', 'Library']];
 
 export interface Draft {
   date: string;
@@ -116,7 +118,7 @@ export default function App() {
     if (screen === 'analyzing') return cancelAnalyze(), true;
     if (screen === 'review' || screen === 'failed' || screen === 'manual') return go(picking ? 'manual' : 'add'), true;
     if (screen === 'password') return go('settings'), true;
-    if (screen === 'add' || screen === 'settings' || screen === 'week' || screen === 'library') {
+    if (screen === 'add' || screen === 'settings' || screen === 'week' || screen === 'body' || screen === 'library') {
       if (picking) return setPicking(false), go('manual'), true;
       if (screen === 'add') voice.cancel();
       return go('today'), true;
@@ -297,7 +299,9 @@ export default function App() {
       </div>
     );
 
-  const showNav = (screen === 'today' || screen === 'week' || screen === 'library') && !picking;
+  const showNav = (screen === 'today' || screen === 'week' || screen === 'body' || screen === 'library') && !picking;
+  // the weekly check-in is due: a dot on the Body tab and a line on Today until it's done
+  const checkIn = checkInDue(data, today);
 
   return (
     <div className="app">
@@ -314,6 +318,8 @@ export default function App() {
           }}
           toggleDatePick={() => setDatePick(p => !p)}
           openSettings={() => go('settings')}
+          checkInSince={checkIn.due ? checkIn.since : undefined}
+          openBody={() => go('body')}
           openItem={(m, it) =>
             setSheet({
               type: 'item',
@@ -437,6 +443,8 @@ export default function App() {
         />
       )}
 
+      {screen === 'body' && <Body data={data} today={today} onSaved={msg => showToast(msg)} />}
+
       {screen === 'settings' && (
         <Settings
           data={data}
@@ -487,6 +495,7 @@ export default function App() {
                 }}
               >
                 {label}
+                {k === 'body' && checkIn.due && <span className="nav-due" aria-label="check-in due" />}
               </button>
             ))}
           </nav>

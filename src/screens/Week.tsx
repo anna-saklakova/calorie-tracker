@@ -1,13 +1,12 @@
 import { ChevronLeft, ChevronRight } from '../components/icons';
 import { MacroCards } from '../components/ui';
 import type { MacroCardData } from '../components/ui';
-import { MON, parse, shift, WD, weekLabel } from '../lib/dates';
+import { parse, shift, WD, weekLabel } from '../lib/dates';
 import { balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalParts, kcalStatus, kcalZone, MACRO_KEYS, macroPct, macroTargets, proteinGoal, proteinStatus, TAG_LABEL } from '../lib/nutrition';
 import type { BalanceTag, KcalZone, MacroKey, ProteinStatus } from '../lib/nutrition';
 import { kcalWeekTag, proteinWeekTag, weekStats } from '../lib/stats';
 import type { WeekStats } from '../lib/stats';
 import type { Data } from '../lib/types';
-import { KCAL_PER_KG, maintenance, measures, round50, waistTrend, weighIns, weightTrend } from '../lib/weight';
 
 interface Props {
   data: Data;
@@ -130,55 +129,6 @@ function WeekResult({ w }: { w: WeekStats }) {
             <div className="num" style={{ fontSize: 14, fontWeight: 600, marginTop: 10 }}>{t.line}</div>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{t.sub}</div>
             {t.warn && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 2 }}>{t.warn}</div>}
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-const shortDate = (d: string) => `${WD[parse(d).getDay()]} ${parse(d).getDate()} ${MON[parse(d).getMonth()]}`;
-const signed = (n: number, digits = 1) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(digits)}`;
-
-/** Weekly weigh-ins: the latest, the trend, the calories that keep the weight steady by the user's log, and the waist if measured. */
-function WeightCard({ data, upTo, goal }: { data: Data; upTo: string; goal: number }) {
-  const all = weighIns(data, upTo);
-  const last = all[all.length - 1];
-  const trend = weightTrend(data, upTo);
-  const m = maintenance(data, upTo);
-  const waist = measures(data, 'waist', upTo).pop();
-  const wTrend = waistTrend(data, upTo);
-  // only what there is to show: no placeholders while there are too few weigh-ins
-  if (!last && !waist) return null;
-  const rows: { label: string; sub: string; value: string }[] = [];
-  if (last) rows.push({ label: 'Last weigh-in', sub: shortDate(last.date), value: `${last.kg.toFixed(1)} kg` });
-  if (trend) rows.push({ label: 'Trend', sub: `${trend.n} weigh-ins over ${Math.round(trend.span / 7)} weeks`, value: `${signed(trend.perWeek, 2)} kg a week` });
-  if (m.status === 'ok') {
-    const atGoal = goal > 0 ? ((goal - m.kcal) * 7) / KCAL_PER_KG : null;
-    rows.push({
-      label: 'Maintenance by your log',
-      sub: `± ${fmt(round50(m.range))} kcal${atGoal !== null ? ` · at your goal ${signed(atGoal, 2)} kg a week` : ''}`,
-      value: `≈ ${fmt(round50(m.kcal))} kcal`
-    });
-  }
-  if (waist) {
-    rows.push({
-      label: 'Waist',
-      sub: wTrend ? `${signed(wTrend.perWeek, 1)} cm a week · ${wTrend.n} over ${Math.round(wTrend.span / 7)} weeks` : shortDate(waist.date),
-      value: `${waist.value.toFixed(1)} cm`
-    });
-  }
-  return (
-    <section style={{ marginTop: 28 }}>
-      <div className="label" style={{ padding: '0 4px 10px' }}>Weight</div>
-      <div className="card">
-        {rows.map(r => (
-          <div key={r.label} className="row" style={{ cursor: 'default' }}>
-            <div style={{ minWidth: 0 }}>
-              <div className="row-name">{r.label}</div>
-              <div className="row-sub">{r.sub}</div>
-            </div>
-            <div className="num" style={{ fontSize: 16, fontWeight: 600, textAlign: 'right', flex: 'none' }}>{r.value}</div>
           </div>
         ))}
       </div>
@@ -345,7 +295,6 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
             />
           )}
         </div>
-        <WeightCard data={data} upTo={lastDay} goal={s.goal} />
         {now.days > 0 && prev.days > 0 && <Compare now={now} prev={prev} goal={s.goal} isCurrent={isCurrent} />}
       </div>
     </div>
