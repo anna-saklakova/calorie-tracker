@@ -1,12 +1,10 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { ChevronLeft, ChevronRight, SettingsIcon } from '../components/icons';
-import { DateStrip, NumInput } from '../components/ui';
+import { DateStrip } from '../components/ui';
 import { dayLabel, shift } from '../lib/dates';
 import { amountLabel, dayTotals, fmt, goalsOn, kcalParts, mealLabels, PACE_LABEL, proteinGoal, proteinPace } from '../lib/nutrition';
 import type { PaceStatus, ProteinGoal } from '../lib/nutrition';
-import { setWaist, setWeighIn } from '../lib/store';
 import type { Data, Item, Meal } from '../lib/types';
-import { daysSinceWeighIn, measures, WEIGH_EVERY, weighIns } from '../lib/weight';
 
 interface Props {
   data: Data;
@@ -16,6 +14,9 @@ interface Props {
   setDate: (d: string) => void;
   toggleDatePick: () => void;
   openSettings: () => void;
+  /** set while the weekly check-in is due: days since the last one, null when there is none */
+  checkInSince?: number | null;
+  openBody: () => void;
   openItem: (meal: Meal, item: Item) => void;
   deleteItem: (meal: Meal, item: Item) => void;
 }
@@ -90,64 +91,7 @@ function ProteinPanel({ protein, pg, kcal, goal }: { protein: number; pg: Protei
   );
 }
 
-/**
- * The weekly weigh-in. Shown on a day that has one, and on today when the last one is a week old or
- * there is none. The waist goes underneath as a quieter, optional line: same day, same conditions.
- */
-function WeighInRow({ data, date }: { data: Data; date: string }) {
-  const [text, setText] = useState(data.days[date]?.weight ? String(data.days[date]!.weight) : '');
-  const [waist, setWaistText] = useState(data.days[date]?.waist ? String(data.days[date]!.waist) : '');
-  const before = weighIns(data, date).filter(w => w.date < date).pop();
-  const waistBefore = measures(data, 'waist', date).filter(w => w.date < date).pop();
-  return (
-    <div className="card" style={{ marginTop: 12 }}>
-      <div className="row" style={{ cursor: 'default' }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>Weigh-in</div>
-          <div className="row-sub">{before ? `Last ${before.kg.toFixed(1)} kg · same day and conditions` : 'Once a week · morning, before eating'}</div>
-        </div>
-        <div className="input-wrap">
-          <NumInput
-            value={text}
-            ariaLabel="Weight in kg"
-            placeholder="—"
-            onChange={v => {
-              setText(v);
-              const kg = Math.max(0, Math.round((+v || 0) * 10) / 10);
-              setWeighIn(date, kg);
-            }}
-            className="num"
-            style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}
-          />
-          <span className="unit">kg</span>
-        </div>
-      </div>
-      <div className="row" style={{ cursor: 'default', paddingTop: 10, paddingBottom: 10 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-2)' }}>Waist</div>
-          <div className="row-sub">{waistBefore ? `Last ${waistBefore.value.toFixed(1)} cm` : 'Optional · at the navel, relaxed'}</div>
-        </div>
-        <div className="input-wrap" style={{ height: 36 }}>
-          <NumInput
-            value={waist}
-            ariaLabel="Waist in cm"
-            placeholder="—"
-            onChange={v => {
-              setWaistText(v);
-              const cm = Math.max(0, Math.round((+v || 0) * 10) / 10);
-              setWaist(date, cm);
-            }}
-            className="num"
-            style={{ width: 64, fontSize: 15, fontWeight: 600, textAlign: 'right' }}
-          />
-          <span className="unit">cm</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function Today({ data, date, today, datePick, setDate, toggleDatePick, openSettings, openItem, deleteItem }: Props) {
+export function Today({ data, date, today, datePick, setDate, toggleDatePick, openSettings, checkInSince, openBody, openItem, deleteItem }: Props) {
   // the goals that applied on this day (goal changes don't rewrite the past)
   const s = goalsOn(data.settings, date);
   const day = data.days[date];
@@ -161,11 +105,6 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
   const greenLen = (RING * parts.within) / ringScale;
   const overLen = (RING * parts.over) / ringScale;
   const labels = mealLabels(meals);
-  const since = daysSinceWeighIn(data, today);
-  const due = date === today && (since === null || since >= WEIGH_EVERY);
-  // a weigh-in that was missed can be added on its own day later, or today ahead of time
-  const [weighOpenOn, setWeighOpenOn] = useState<string | null>(null);
-  const showWeighIn = (day?.weight ?? 0) > 0 || (day?.waist ?? 0) > 0 || due || weighOpenOn === date;
 
   // the big number is what's left to the goal; the total goes underneath
   const left = s.goal - tot.kcal;
@@ -242,7 +181,16 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
         <div style={{ marginTop: 14 }}>
           <ProteinPanel protein={tot.p} pg={proteinGoal(s)} kcal={tot.kcal} goal={s.goal} />
         </div>
-        {showWeighIn && <WeighInRow key={date} data={data} date={date} />}
+        {/* the check-in itself lives on Body; here only a reminder while it's due */}
+        {checkInSince !== undefined && date === today && (
+          <button className="checkin-due" onClick={openBody}>
+            <span>
+              <b>Weekly check-in</b>
+              <span>{checkInSince === null ? 'Weight and waist, once a week' : `Last one ${checkInSince} days ago`}</span>
+            </span>
+            <ChevronRight small />
+          </button>
+        )}
 
         {!meals.length && (
           <div style={{ marginTop: 72, textAlign: 'center', padding: '0 24px' }}>
@@ -266,14 +214,6 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
           </section>
         ))}
 
-        {/* not due: out of the way, under the meals */}
-        {!showWeighIn && date <= today && (
-          <div style={{ marginTop: 24, display: 'flex', justifyContent: 'center' }}>
-            <button className="pill-btn" onClick={() => setWeighOpenOn(date)}>
-              + Weigh-in
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

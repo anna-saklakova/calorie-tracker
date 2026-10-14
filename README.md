@@ -20,7 +20,7 @@ To try it on the phone, run `npm run dev -- --host` and open the LAN address in 
 | Area | Status |
 | --- | --- |
 | Account | Required. Nothing opens until you sign in or create an account: email + password (confirmed by email, with password reset) or Google. One email is one account, whichever way you sign in |
-| Today, Week, Library, Settings, Add by hand, item and product sheets | Real. Data is saved to your account in Supabase, nothing is kept on the device |
+| Today, Week, Body, Library, Settings, Add by hand, item and product sheets | Real. Data is saved to your account in Supabase, nothing is kept on the device |
 | Photos | Real camera (`capture`) and gallery pickers. Each photo is copied into memory and scaled to 2048 px as soon as it's picked, so a photo that can't be read or opened is reported right away. Each photo is tagged plate or label; tap the tag to switch |
 | Voice note | Real. Recorded in the browser, transcribed by `gpt-transcribe` on the server. The text goes into the note, where you can edit it. Recognize can be pressed while the note is still recording or transcribing (or photos are still loading): it finishes those first |
 | Recognize | Real. Photos + note → foods, grams and nutrients with their sources, see below |
@@ -52,10 +52,11 @@ Based on the evidence summarised below (`src/lib/stats.ts`, `src/lib/weight.ts`)
 - **Week result**: once a week is over, a card at the top gives its calorie and protein verdict (✓ / ~ / ✕) with the days by colour.
 - **Calories add up over days**, so the week shows the arithmetic mean of the finished, logged days, plus their sum against the goals of the same days ("7 of 7 days logged · 15 340 of 14 700 kcal"). Not the median: it would hide the days over. Days without a log are left out; with more than one such day the line turns yellow, since the average may be off.
 - **Protein by the 80 / 20 rule.** The body repairs tissue over the week, so a day or two below the range doesn't spoil it; what matters is how often protein falls below the almost level. The protein card is green with at most one day below it, yellow with two (a rare exception), red with three or more (`proteinWeekTag`).
-- **Weight once a week.** On Today a Weigh-in row appears when the last weigh-in is 7 days old or more (and on any day that has one); on any other day up to today, **+ Weigh-in** adds one, so earlier weigh-ins can be entered on their own days. Same day of the week, morning, before eating. Weigh-ins are stored on the day (`Day.weight`).
-- **Waist, optional.** The Weigh-in card on Today has a quieter Waist line underneath (cm, at the navel, relaxed). It has no reminder of its own: fill it in with the weigh-in or leave it empty. Stored on the day (`Day.waist`). Week shows the last measurement in the Weight card and, once there are enough of them, its trend in cm a week, by the same rule as the weight trend.
+- **Body tab: weekly check-in.** Weight and waist live on their own tab, not on Today. The check-in form takes today by default; the 7-day strip or the calendar picks any earlier day, and a day that has a check-in is marked and opens prefilled (also from History). Once the last check-in is 7 days old the Body tab gets a red dot and Today shows a single **Weekly check-in** line that opens Body; nothing else of it is on Today or Week. Stored on the day (`Day.weight`, `Day.waist`).
+- **Waist, optional**, next to the weight in the same form (cm, at the navel, relaxed). Body shows the latest weight and waist with their trends a week, a chart of each over 12 weeks or all time (the trend line dashed, tap a point for its value), and the history.
 - **Trend**: a least-squares line through the weigh-ins of the last 6 weeks (at least 3, at least 2 weeks apart), in kg a week; not the difference between two weigh-ins, which are noisy.
-- **Maintenance by your log**: average logged intake between the first and last weigh-in minus the weight change × 7 700 kcal/kg, with a ± range from the trend's uncertainty. Only with at least 4 weigh-ins over 4 weeks and food logged on 6 of 7 days in between. It compares the log with the scale, so it also absorbs what the log misses. Shown on Week once there is enough data (with what the current goal means in kg a week; until then Week shows only the last weigh-in, and nothing without one) and under the daily goal in Settings; the goal itself is never changed automatically.
+- **Maintenance by your log**: average logged intake between the first and last weigh-in minus the weight change × 7 700 kcal/kg, with a ± range from the trend's uncertainty. Only with at least 4 weigh-ins over 4 weeks and food logged on 6 of 7 days in between. It compares the log with the scale, so it also absorbs what the log misses. Shown on Body once there is enough data (with what the current goal means in kg a week) and under the daily goal in Settings; the goal itself is never changed automatically.
+- **What's behind it** (`src/lib/body.ts`): at most four short readings of the latest change against the food log. The last change vs what the food explains at your maintenance (a gap of more than 0.6 kg is read as water, with a carb load in the 2 days before named when there was one: glycogen holds ≈ 3 g of water per gram, Olsson & Saltin 1970); the pace as a share of body weight (0.5–1 % a week keeps muscle, faster costs more: Helms 2014, Garthe 2011); protein per kg while losing (≥ 1.6 g/kg, Morton 2018); waist against weight (waist down at a steady weight = fat lost, muscle kept; waist tracks abdominal fat, Ashwell 2012); weekends well above weekdays (Racette 2008); too few days logged to judge.
 
 Sources: Trommelen 2023 (Cell Rep Med, a large protein dose within a day is used); Areta 2013 and Schoenfeld & Aragon 2018 (distribution is second order); meta-analyses of intermittent vs continuous energy restriction (Cioffi 2018 and others: same weight loss); weekly vs daily self-weighing (meta-analysis 2015: no difference); Orsama 2014 (weekly weight rhythm); Hall 2008 and Hall's energy-balance work (7 700 kcal/kg is rough, estimates need ≥ 4 weeks); doubly labelled water reviews (self-reported intake is under-reported).
 
@@ -85,7 +86,7 @@ src/
   App.tsx              screen state, navigation, Android back button, toasts
   styles.css           design tokens (colours, radii, type) and components
   components/          icons, chips, switches, macro cards, bottom sheet
-  screens/             SignIn, Today, AddMeal, Flow (Recognizing/Review/Failed/Manual), Library, Week, Settings
+  screens/             SignIn, Today, AddMeal, Flow (Recognizing/Review/Failed/Manual), Library, Week, Body, Settings
   lib/
     store.ts           in-memory data and mutations (no device storage)
     sync.ts            loading, saving and pulling changes
@@ -94,6 +95,7 @@ src/
     supabase.ts        client and auth (password, Google, reset)
     stats.ts           the week's numbers: coverage, sum against the goals, protein by days
     weight.ts          weigh-ins and waist, their trends, maintenance by the log
+    body.ts            check-ins, when one is due, the food between them and the readings on Body
     nutrition.ts       totals, macro % of calories, goal tags (protein may go over, fat and carbs may stay under; On track ≤3 pts the wrong way, Acceptable ≤8, else Off balance), day status with the minimum, protein pace
     recognize.ts       calls /api/recognize, maps the result to Review rows
     ai/                shared with the server: schema, prompts, web lookup, nutrient maths
