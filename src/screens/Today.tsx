@@ -4,9 +4,9 @@ import { DateStrip, NumInput } from '../components/ui';
 import { dayLabel, shift } from '../lib/dates';
 import { amountLabel, dayTotals, fmt, goalsOn, kcalParts, mealLabels, PACE_LABEL, proteinGoal, proteinPace } from '../lib/nutrition';
 import type { PaceStatus, ProteinGoal } from '../lib/nutrition';
-import { setWeighIn } from '../lib/store';
+import { setWaist, setWeighIn } from '../lib/store';
 import type { Data, Item, Meal } from '../lib/types';
-import { daysSinceWeighIn, WEIGH_EVERY, weighIns } from '../lib/weight';
+import { daysSinceWeighIn, measures, WEIGH_EVERY, weighIns } from '../lib/weight';
 
 interface Props {
   data: Data;
@@ -92,11 +92,13 @@ function ProteinPanel({ protein, pg, kcal, goal }: { protein: number; pg: Protei
 
 /**
  * The weekly weigh-in. Shown on a day that has one, and on today when the last one is a week old or
- * there is none.
+ * there is none. The waist goes underneath as a quieter, optional line: same day, same conditions.
  */
 function WeighInRow({ data, date }: { data: Data; date: string }) {
   const [text, setText] = useState(data.days[date]?.weight ? String(data.days[date]!.weight) : '');
+  const [waist, setWaistText] = useState(data.days[date]?.waist ? String(data.days[date]!.waist) : '');
   const before = weighIns(data, date).filter(w => w.date < date).pop();
+  const waistBefore = measures(data, 'waist', date).filter(w => w.date < date).pop();
   return (
     <div className="card" style={{ marginTop: 12 }}>
       <div className="row" style={{ cursor: 'default' }}>
@@ -118,6 +120,27 @@ function WeighInRow({ data, date }: { data: Data; date: string }) {
             style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}
           />
           <span className="unit">kg</span>
+        </div>
+      </div>
+      <div className="row" style={{ cursor: 'default', paddingTop: 10, paddingBottom: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-2)' }}>Waist</div>
+          <div className="row-sub">{waistBefore ? `Last ${waistBefore.value.toFixed(1)} cm` : 'Optional · at the navel, relaxed'}</div>
+        </div>
+        <div className="input-wrap" style={{ height: 36 }}>
+          <NumInput
+            value={waist}
+            ariaLabel="Waist in cm"
+            placeholder="—"
+            onChange={v => {
+              setWaistText(v);
+              const cm = Math.max(0, Math.round((+v || 0) * 10) / 10);
+              setWaist(date, cm);
+            }}
+            className="num"
+            style={{ width: 64, fontSize: 15, fontWeight: 600, textAlign: 'right' }}
+          />
+          <span className="unit">cm</span>
         </div>
       </div>
     </div>
@@ -142,7 +165,7 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
   const due = date === today && (since === null || since >= WEIGH_EVERY);
   // a weigh-in that was missed can be added on its own day later, or today ahead of time
   const [weighOpenOn, setWeighOpenOn] = useState<string | null>(null);
-  const showWeighIn = (day?.weight ?? 0) > 0 || due || weighOpenOn === date;
+  const showWeighIn = (day?.weight ?? 0) > 0 || (day?.waist ?? 0) > 0 || due || weighOpenOn === date;
 
   // the big number is what's left to the goal; the total goes underneath
   const left = s.goal - tot.kcal;

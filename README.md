@@ -53,6 +53,7 @@ Based on the evidence summarised below (`src/lib/stats.ts`, `src/lib/weight.ts`)
 - **Calories add up over days**, so the week shows the arithmetic mean of the finished, logged days, plus their sum against the goals of the same days ("7 of 7 days logged · 15 340 of 14 700 kcal"). Not the median: it would hide the days over. Days without a log are left out; with more than one such day the line turns yellow, since the average may be off.
 - **Protein by the 80 / 20 rule.** The body repairs tissue over the week, so a day or two below the range doesn't spoil it; what matters is how often protein falls below the almost level. The protein card is green with at most one day below it, yellow with two (a rare exception), red with three or more (`proteinWeekTag`).
 - **Weight once a week.** On Today a Weigh-in row appears when the last weigh-in is 7 days old or more (and on any day that has one); on any other day up to today, **+ Weigh-in** adds one, so earlier weigh-ins can be entered on their own days. Same day of the week, morning, before eating. Weigh-ins are stored on the day (`Day.weight`).
+- **Waist, optional.** The Weigh-in card on Today has a quieter Waist line underneath (cm, at the navel, relaxed). It has no reminder of its own: fill it in with the weigh-in or leave it empty. Stored on the day (`Day.waist`). Week shows the last measurement in the Weight card and, once there are enough of them, its trend in cm a week, by the same rule as the weight trend.
 - **Trend**: a least-squares line through the weigh-ins of the last 6 weeks (at least 3, at least 2 weeks apart), in kg a week; not the difference between two weigh-ins, which are noisy.
 - **Maintenance by your log**: average logged intake between the first and last weigh-in minus the weight change × 7 700 kcal/kg, with a ± range from the trend's uncertainty. Only with at least 4 weigh-ins over 4 weeks and food logged on 6 of 7 days in between. It compares the log with the scale, so it also absorbs what the log misses. Shown on Week once there is enough data (with what the current goal means in kg a week; until then Week shows only the last weigh-in, and nothing without one) and under the daily goal in Settings; the goal itself is never changed automatically.
 
@@ -92,7 +93,7 @@ src/
     merge.ts           per-record conflict rules (newer wins), unsaved-record tracking
     supabase.ts        client and auth (password, Google, reset)
     stats.ts           the week's numbers: coverage, sum against the goals, protein by days
-    weight.ts          weigh-ins, weight trend, maintenance by the log
+    weight.ts          weigh-ins and waist, their trends, maintenance by the log
     nutrition.ts       totals, macro % of calories, goal tags (protein may go over, fat and carbs may stay under; On track ≤3 pts the wrong way, Acceptable ≤8, else Off balance), day status with the minimum, protein pace
     recognize.ts       calls /api/recognize, maps the result to Review rows
     ai/                shared with the server: schema, prompts, web lookup, nutrient maths

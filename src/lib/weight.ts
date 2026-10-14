@@ -7,6 +7,7 @@ import type { Data } from './types';
 // One weigh-in is noisy (water, the weekend-to-weekday swing), so the trend is a least-squares line
 // through several of them, not the difference between two. Weekly weighing works as well as daily
 // for weight control, as long as it's the same day of the week and the same conditions.
+// The waist is optional and measured on the same days; its trend is worked out the same way.
 
 export interface WeighIn { date: string; kg: number }
 
@@ -26,9 +27,16 @@ const dayNo = (d: string) => Math.round(parse(d).getTime() / 86400000);
 
 /** All weigh-ins up to `upTo` (inclusive), oldest first. */
 export function weighIns(data: Data, upTo = '9999-12-31'): WeighIn[] {
+  return measures(data, 'weight', upTo).map(m => ({ date: m.date, kg: m.value }));
+}
+
+export interface Measure { date: string; value: number }
+
+/** All records of `key` (kg or cm) up to `upTo` (inclusive), oldest first. */
+export function measures(data: Data, key: 'weight' | 'waist', upTo = '9999-12-31'): Measure[] {
   return Object.entries(data.days)
-    .filter(([d, day]) => d <= upTo && (day.weight ?? 0) > 0)
-    .map(([date, day]) => ({ date, kg: day.weight! }))
+    .filter(([d, day]) => d <= upTo && (day[key] ?? 0) > 0)
+    .map(([date, day]) => ({ date, value: day[key]! }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -39,11 +47,11 @@ export function daysSinceWeighIn(data: Data, today: string): number | null {
 }
 
 export interface Trend {
-  /** kg per week; negative = losing */
+  /** kg (or cm) per week; negative = losing */
   perWeek: number;
   /** standard error of perWeek */
   se: number;
-  /** the line's value at the last weigh-in, kg */
+  /** the line's value at the last record, kg (or cm) */
   now: number;
   n: number;
   /** days from the first to the last weigh-in used */
@@ -57,17 +65,26 @@ export interface Trend {
  * Needs at least 3 weigh-ins at least 14 days apart, otherwise null.
  */
 export function weightTrend(data: Data, upTo: string, days = TREND_DAYS): Trend | null {
-  const pts = weighIns(data, upTo).filter(w => w.date > shift(upTo, -days));
+  return trendOf(measures(data, 'weight', upTo), upTo, days);
+}
+
+/** The waist trend in cm a week, by the same rules as the weight trend. */
+export function waistTrend(data: Data, upTo: string, days = TREND_DAYS): Trend | null {
+  return trendOf(measures(data, 'waist', upTo), upTo, days);
+}
+
+function trendOf(all: Measure[], upTo: string, days: number): Trend | null {
+  const pts = all.filter(w => w.date > shift(upTo, -days));
   if (pts.length < 3) return null;
   const x = pts.map(p => dayNo(p.date));
   const span = x[x.length - 1] - x[0];
   if (span < 14) return null;
   const n = pts.length;
   const mx = x.reduce((a, b) => a + b, 0) / n;
-  const my = pts.reduce((a, p) => a + p.kg, 0) / n;
+  const my = pts.reduce((a, p) => a + p.value, 0) / n;
   const sxx = x.reduce((a, v) => a + (v - mx) ** 2, 0);
-  const slope = x.reduce((a, v, i) => a + (v - mx) * (pts[i].kg - my), 0) / sxx;
-  const resid = pts.reduce((a, p, i) => a + (p.kg - (my + slope * (x[i] - mx))) ** 2, 0);
+  const slope = x.reduce((a, v, i) => a + (v - mx) * (pts[i].value - my), 0) / sxx;
+  const resid = pts.reduce((a, p, i) => a + (p.value - (my + slope * (x[i] - mx))) ** 2, 0);
   const se = n > 2 ? Math.sqrt(resid / (n - 2) / sxx) : 0;
   return { perWeek: slope * 7, se: se * 7, now: my + slope * (x[n - 1] - mx), n, span, from: pts[0].date, to: pts[n - 1].date };
 }

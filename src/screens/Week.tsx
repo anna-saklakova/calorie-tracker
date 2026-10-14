@@ -7,7 +7,7 @@ import type { BalanceTag, KcalZone, MacroKey, ProteinStatus } from '../lib/nutri
 import { kcalWeekTag, proteinWeekTag, weekStats } from '../lib/stats';
 import type { WeekStats } from '../lib/stats';
 import type { Data } from '../lib/types';
-import { KCAL_PER_KG, maintenance, round50, weighIns, weightTrend } from '../lib/weight';
+import { KCAL_PER_KG, maintenance, measures, round50, waistTrend, weighIns, weightTrend } from '../lib/weight';
 
 interface Props {
   data: Data;
@@ -140,15 +140,18 @@ function WeekResult({ w }: { w: WeekStats }) {
 const shortDate = (d: string) => `${WD[parse(d).getDay()]} ${parse(d).getDate()} ${MON[parse(d).getMonth()]}`;
 const signed = (n: number, digits = 1) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(digits)}`;
 
-/** Weekly weigh-ins: the latest, the trend, and the calories that keep the weight steady by the user's log. */
+/** Weekly weigh-ins: the latest, the trend, the calories that keep the weight steady by the user's log, and the waist if measured. */
 function WeightCard({ data, upTo, goal }: { data: Data; upTo: string; goal: number }) {
   const all = weighIns(data, upTo);
   const last = all[all.length - 1];
   const trend = weightTrend(data, upTo);
   const m = maintenance(data, upTo);
+  const waist = measures(data, 'waist', upTo).pop();
+  const wTrend = waistTrend(data, upTo);
   // only what there is to show: no placeholders while there are too few weigh-ins
-  if (!last) return null;
-  const rows: { label: string; sub: string; value: string }[] = [{ label: 'Last weigh-in', sub: shortDate(last.date), value: `${last.kg.toFixed(1)} kg` }];
+  if (!last && !waist) return null;
+  const rows: { label: string; sub: string; value: string }[] = [];
+  if (last) rows.push({ label: 'Last weigh-in', sub: shortDate(last.date), value: `${last.kg.toFixed(1)} kg` });
   if (trend) rows.push({ label: 'Trend', sub: `${trend.n} weigh-ins over ${Math.round(trend.span / 7)} weeks`, value: `${signed(trend.perWeek, 2)} kg a week` });
   if (m.status === 'ok') {
     const atGoal = goal > 0 ? ((goal - m.kcal) * 7) / KCAL_PER_KG : null;
@@ -156,6 +159,13 @@ function WeightCard({ data, upTo, goal }: { data: Data; upTo: string; goal: numb
       label: 'Maintenance by your log',
       sub: `± ${fmt(round50(m.range))} kcal${atGoal !== null ? ` · at your goal ${signed(atGoal, 2)} kg a week` : ''}`,
       value: `≈ ${fmt(round50(m.kcal))} kcal`
+    });
+  }
+  if (waist) {
+    rows.push({
+      label: 'Waist',
+      sub: wTrend ? `${signed(wTrend.perWeek, 1)} cm a week · ${wTrend.n} over ${Math.round(wTrend.span / 7)} weeks` : shortDate(waist.date),
+      value: `${waist.value.toFixed(1)} cm`
     });
   }
   return (
