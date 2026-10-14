@@ -126,6 +126,16 @@ export function setWeighIn(date: string, kg: number) {
   );
 }
 
+/** Records the waist measured on `date` in cm; 0 removes it. */
+export function setWaist(date: string, cm: number) {
+  update(d =>
+    touchDay(d, date, day => {
+      const { waist: _old, ...rest } = day;
+      return cm > 0 ? { ...rest, waist: cm } : rest;
+    })
+  );
+}
+
 export function upsertProduct(p: Product) {
   update(d => {
     const next = { ...p, updatedAt: Date.now() };

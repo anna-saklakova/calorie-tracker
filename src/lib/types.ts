@@ -33,6 +33,8 @@ export interface Day {
   meals: Meal[];
   /** the weigh-in on this day, kg; missing = none */
   weight?: number;
+  /** the waist measured on this day, cm; missing = none */
+  waist?: number;
   updatedAt: number;
 }
 

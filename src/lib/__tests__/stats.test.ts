@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { shift } from '../dates';
 import { kcalWeekTag, proteinWeekTag, weekStats } from '../stats';
-import { getData, setData, setWeighIn } from '../store';
+import { getData, setData, setWaist, setWeighIn } from '../store';
 import { emptyData } from '../types';
 import type { Data, Day } from '../types';
-import { daysSinceWeighIn, maintenance, weightTrend } from '../weight';
+import { daysSinceWeighIn, maintenance, waistTrend, weightTrend } from '../weight';
 
 const day = (kcal: number, p = 0, weight?: number): Day => ({
   meals: kcal ? [{ id: 'm', type: 'Lunch', items: [{ id: 'i', name: 'x', amount: 100, kcal, p, f: 0, c: 0 }] }] : [],
@@ -135,6 +135,17 @@ describe('weigh-ins in the store', () => {
     setWeighIn('2026-10-10', 0);
     expect(getData().days['2026-10-10'].weight).toBeUndefined();
     expect(daysSinceWeighIn(getData(), '2026-10-17')).toBeNull();
+  });
+
+  it('keeps the waist apart from the weight, with its own trend in cm', () => {
+    setWeighIn('2026-10-01', 71.4);
+    ['2026-09-24', '2026-10-01', '2026-10-08'].forEach((d, i) => setWaist(d, 80 - i * 0.5));
+    expect(getData().days['2026-10-01']).toMatchObject({ weight: 71.4, waist: 79.5 });
+    expect(waistTrend(getData(), '2026-10-08')?.perWeek).toBeCloseTo(-0.5);
+    expect(weightTrend(getData(), '2026-10-08')).toBeNull();
+    setWaist('2026-10-01', 0);
+    expect(getData().days['2026-10-01']).toMatchObject({ weight: 71.4 });
+    expect(getData().days['2026-10-01'].waist).toBeUndefined();
   });
 
 });
