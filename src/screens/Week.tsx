@@ -69,11 +69,11 @@ const PROTEIN_MARK: Record<Exclude<ProteinStatus, 'none'>, MarkDef> = {
   short: ['✕', 'var(--danger)', 'protein not reached']
 };
 const KCAL_MARK: Record<Exclude<KcalZone, 'none'>, MarkDef> = {
-  ideal: ['✓', 'var(--accent)', 'calorie goal reached, within 5 %'],
-  low: ['↓', 'var(--est)', 'calories 5–15 % under the goal'],
-  high: ['↑', 'var(--est)', 'calories 5–15 % over the goal'],
-  too_low: ['↓', 'var(--danger)', 'calories more than 15 % under the goal'],
-  too_high: ['↑', 'var(--danger)', 'calories more than 15 % over the goal']
+  ideal: ['✓', 'var(--accent)', 'calorie goal reached, within 3 %'],
+  low: ['↓', 'var(--est)', 'calories 3–7 % under the goal'],
+  high: ['↑', 'var(--est)', 'calories 3–7 % over the goal'],
+  too_low: ['↓', 'var(--danger)', 'calories more than 7 % under the goal'],
+  too_high: ['↑', 'var(--danger)', 'calories more than 7 % over the goal']
 };
 const VERDICT_MARK: Record<Exclude<BalanceTag, 'none'>, [string, string]> = { on: ['✓', 'var(--accent)'], ok: ['~', 'var(--est)'], off: ['✕', 'var(--danger)'] };
 
@@ -278,7 +278,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
               mark={KCAL_MARK}
               days={totals.map(x => {
                 const raw = x.d <= today ? kcalZone(x.t.kcal, x.goals.goal) : 'none';
-                // today isn't over: only a day already more than 15 % over is settled
+                // today isn't over: only a day already more than 7 % over is settled
                 return { d: x.d, st: x.d === today && raw !== 'too_high' ? 'none' : raw, note: `${fmt(x.t.kcal)} of ${fmt(x.goals.goal)} kcal` };
               })}
             />

@@ -39,26 +39,26 @@ describe('goal history', () => {
 });
 
 describe('day status', () => {
-  it('colours calories up to 5 % over, up to 15 % over and more', () => {
+  it('colours calories up to 3 % over, up to 7 % over and more', () => {
     expect(kcalStatus(0, 2000)).toBe('none');
     expect(kcalStatus(1500, 0)).toBe('none');
     expect(kcalStatus(2000, 2000)).toBe('within');
-    expect(kcalStatus(2100, 2000)).toBe('within');
-    expect(kcalStatus(2101, 2000)).toBe('over');
-    expect(kcalStatus(2300, 2000)).toBe('over');
-    expect(kcalStatus(2301, 2000)).toBe('way_over');
+    expect(kcalStatus(2060, 2000)).toBe('within');
+    expect(kcalStatus(2061, 2000)).toBe('over');
+    expect(kcalStatus(2140, 2000)).toBe('over');
+    expect(kcalStatus(2141, 2000)).toBe('way_over');
   });
 
   it('puts a day into a calorie zone around its goal', () => {
-    // goal 1900: green 1805–1995, yellow 1615–2185, red beyond
-    expect(kcalZone(1805, 1900)).toBe('ideal');
-    expect(kcalZone(1995, 1900)).toBe('ideal');
-    expect(kcalZone(1804, 1900)).toBe('low');
-    expect(kcalZone(1615, 1900)).toBe('low');
-    expect(kcalZone(1614, 1900)).toBe('too_low');
-    expect(kcalZone(1996, 1900)).toBe('high');
-    expect(kcalZone(2185, 1900)).toBe('high');
-    expect(kcalZone(2186, 1900)).toBe('too_high');
+    // goal 1900: green 1843–1957, yellow 1767–2033, red beyond
+    expect(kcalZone(1843, 1900)).toBe('ideal');
+    expect(kcalZone(1957, 1900)).toBe('ideal');
+    expect(kcalZone(1842, 1900)).toBe('low');
+    expect(kcalZone(1767, 1900)).toBe('low');
+    expect(kcalZone(1766, 1900)).toBe('too_low');
+    expect(kcalZone(1958, 1900)).toBe('high');
+    expect(kcalZone(2033, 1900)).toBe('high');
+    expect(kcalZone(2034, 1900)).toBe('too_high');
     expect(kcalZone(0, 1900)).toBe('none');
     expect(kcalZone(1800, 0)).toBe('none');
   });
@@ -148,8 +148,8 @@ describe('library basis switch', () => {
 
   it('colours only the calories over the goal', () => {
     expect(kcalParts(1800, 2000)).toEqual({ within: 1800, over: 0, overColor: KCAL_COLOR.within });
-    expect(kcalParts(2100, 2000)).toEqual({ within: 2100, over: 0, overColor: KCAL_COLOR.within });
-    expect(kcalParts(2200, 2000)).toEqual({ within: 2000, over: 200, overColor: KCAL_COLOR.over });
+    expect(kcalParts(2060, 2000)).toEqual({ within: 2060, over: 0, overColor: KCAL_COLOR.within });
+    expect(kcalParts(2100, 2000)).toEqual({ within: 2000, over: 100, overColor: KCAL_COLOR.over });
     expect(kcalParts(2500, 2000)).toEqual({ within: 2000, over: 500, overColor: KCAL_COLOR.way_over });
     expect(kcalParts(1500, 0)).toEqual({ within: 1500, over: 0, overColor: KCAL_COLOR.within });
   });

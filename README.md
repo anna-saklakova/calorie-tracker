@@ -47,7 +47,7 @@ The model gets up to 110 s (the function 120 s, the app waits 130 s); the Analyz
 
 Based on the evidence summarised below (`src/lib/stats.ts`, `src/lib/weight.ts`).
 
-- **Calorie zones of a day** (`kcalZone`): within ±5 % of the goal it's reached (green ✓), within ±15 % almost (yellow ↓ / ↑), beyond that not reached (red ↓ / ↑). Week marks each day with these under the chart, next to the protein marks; today gets a mark only once it is already more than 15 % over. The bars and the ring on Today follow the same bands: green up to 5 % over the goal, yellow up to 15 %, red beyond.
+- **Calorie zones of a day** (`kcalZone`): within ±3 % of the goal it's reached (green ✓), within ±7 % almost (yellow ↓ / ↑), beyond that not reached (red ↓ / ↑). Week marks each day with these under the chart, next to the protein marks; today gets a mark only once it is already more than 7 % over. The bars and the ring on Today follow the same bands: green up to 3 % over the goal, yellow up to 7 %, red beyond.
 - **Calorie week** (`kcalWeekTag`), from the colours of its days: green when at least half the days are green, at most 2 are red and none goes over 130 % (a binge that undoes the week's deficit); yellow with at most 3 red days and at most one over 130 %; red otherwise.
 - **Week result**: once a week is over, a card at the top gives its calorie and protein verdict (✓ / ~ / ✕) with the days by colour.
 - **Calories add up over days**, so the week shows the arithmetic mean of the finished, logged days, plus their sum against the goals of the same days ("7 of 7 days logged · 15 340 of 14 700 kcal"). Not the median: it would hide the days over. Days without a log are left out; with more than one such day the line turns yellow, since the average may be off.
