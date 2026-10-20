@@ -63,7 +63,7 @@ describe('calorie week', () => {
   it('counts the days by colour and those over 130 %', () => {
     // goal 2000: green 1900–2100, yellow 1700–2300, over 130 % above 2600
     const days: Record<string, Day> = {};
-    [2000, 1900, 2100, 1899, 2300, 2700, 1600].forEach((k, i) => (days[shift(WS, i)] = day(k)));
+    [2000, 1950, 2050, 1900, 2100, 2700, 1600].forEach((k, i) => (days[shift(WS, i)] = day(k)));
     const w = weekStats(withDays(days, { goal: 2000 }), WS, shift(WS, 7));
     expect(w).toMatchObject({ kcalGreen: 3, kcalYellow: 2, kcalRed: 2, kcalBinge: 1, goalDays: 7 });
     expect(kcalWeekTag(w)).toEqual({ tag: 'ok', label: '3 of 7 days' });
