@@ -1,9 +1,10 @@
 import { useRef } from 'react';
 import { ChevronLeft, ChevronRight, SettingsIcon } from '../components/icons';
-import { DateStrip } from '../components/ui';
+import { DateStrip, Switch } from '../components/ui';
 import { dayLabel, shift } from '../lib/dates';
-import { amountLabel, dayTotals, fmt, goalsOn, kcalParts, mealLabels, PACE_LABEL, proteinGoal, proteinPace } from '../lib/nutrition';
+import { amountLabel, dayGoals, dayTotals, fmt, goalsOn, kcalParts, mealLabels, PACE_LABEL, proteinGoal, proteinPace } from '../lib/nutrition';
 import type { PaceStatus, ProteinGoal } from '../lib/nutrition';
+import { setStrength } from '../lib/store';
 import type { Data, Item, Meal } from '../lib/types';
 
 interface Props {
@@ -93,11 +94,14 @@ function ProteinPanel({ protein, pg, kcal, goal }: { protein: number; pg: Protei
 
 export function Today({ data, date, today, datePick, setDate, toggleDatePick, openSettings, checkInSince, openBody, openItem, deleteItem }: Props) {
   // the goals that applied on this day (goal changes don't rewrite the past)
-  const s = goalsOn(data.settings, date);
+  const s = dayGoals(data, date);
   const day = data.days[date];
   const meals = day?.meals ?? [];
   const tot = dayTotals(day);
   const hasGoal = s.goal > 0;
+  // the switch is there once a strength-day goal exists for this date (or the day is already marked)
+  const strengthOn = !!day?.strength;
+  const strengthGoal = goalsOn(data.settings, date).strengthGoal ?? 0;
   // over the goal the ring stands for everything eaten: green up to the goal, the rest in the over colour
   const parts = kcalParts(tot.kcal, s.goal);
   const ringScale = Math.max(tot.kcal, s.goal, 1);
@@ -177,6 +181,17 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
             </svg>
           )}
         </div>
+
+        {(strengthGoal > 0 || strengthOn) && (
+          <div className="card" style={{ marginTop: 14, padding: '2px 14px' }}>
+            <Switch on={strengthOn} onToggle={() => setStrength(date, !strengthOn)}>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 15, fontWeight: 600 }}>Strength training</span>
+                <span className="row-sub" style={{ display: 'block' }}>{strengthGoal > 0 ? `Goal ${fmt(strengthGoal)} kcal on a training day, ${fmt(goalsOn(data.settings, date).goal)} otherwise` : 'No strength-day goal in force on this date'}</span>
+              </span>
+            </Switch>
+          </div>
+        )}
 
         <div style={{ marginTop: 14 }}>
           <ProteinPanel protein={tot.p} pg={proteinGoal(s)} kcal={tot.kcal} goal={s.goal} />

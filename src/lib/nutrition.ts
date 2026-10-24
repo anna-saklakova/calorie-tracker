@@ -1,4 +1,4 @@
-import type { Day, Goals, Item, Macros, Meal, MealType, Settings } from './types';
+import type { Data, Day, Goals, Item, Macros, Meal, MealType, Settings } from './types';
 
 /** Thin-space thousands separator, as in the design ("1 293"). */
 export const fmt = (n: number) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -156,13 +156,22 @@ export const TAG_LABEL: Record<BalanceTag, string> = { none: '—', on: 'On trac
 
 // ── Goals by date and day status ────────────────────────────
 
-/** The goals that applied on `date`: the latest snapshot starting on or before it. */
-export function goalsOn(s: Settings, date: string): Goals {
-  if (!s.goalHistory?.length) return s;
-  const h = [...s.goalHistory].sort((a, b) => a.from.localeCompare(b.from));
-  // before the first snapshot (shouldn't happen: the first starts at 0000-01-01), use the oldest goals
-  return h.filter(x => x.from <= date).pop() ?? h[0];
+/**
+ * The goals that applied on `date`: the latest snapshot starting on or before it. On a strength-training
+ * day (`strength`) the calorie goal is the strength-day goal, when that snapshot has one.
+ */
+export function goalsOn(s: Settings, date: string, strength = false): Goals {
+  const base = (() => {
+    if (!s.goalHistory?.length) return s;
+    const h = [...s.goalHistory].sort((a, b) => a.from.localeCompare(b.from));
+    // before the first snapshot (shouldn't happen: the first starts at 0000-01-01), use the oldest goals
+    return h.filter(x => x.from <= date).pop() ?? h[0];
+  })();
+  return strength && (base.strengthGoal ?? 0) > 0 ? { ...base, goal: base.strengthGoal! } : base;
 }
+
+/** The goals of a day as the log has it: the strength-day goal when the day is marked as one. */
+export const dayGoals = (data: Data, date: string): Goals => goalsOn(data.settings, date, !!data.days[date]?.strength);
 
 export type KcalStatus = 'none' | 'under' | 'within' | 'over' | 'way_over';
 /**

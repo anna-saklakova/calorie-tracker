@@ -25,6 +25,7 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
   const t = macroTargets(s);
   const hasGoal = s.goal > 0;
   const [goalText, setGoalText] = useState(s.goal ? String(s.goal) : '');
+  const [strengthText, setStrengthText] = useState(s.strengthGoal ? String(s.strengthGoal) : '');
   const [minText, setMinText] = useState(s.min ? String(s.min) : '');
   const range = proteinRange(s);
   const [metText, setMetText] = useState(range ? String(range.met) : '');
@@ -33,7 +34,8 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
   // with a protein range, the macro goal's protein comes from it and can't be typed in
   const byRange = !!range;
   const closeOff = byRange && closeText !== '' && +closeText >= range.met;
-  const minAboveGoal = hasGoal && (s.min ?? 0) > s.goal;
+  const lowestGoal = Math.min(s.goal, (s.strengthGoal ?? 0) > 0 ? s.strengthGoal! : s.goal);
+  const minAboveGoal = hasGoal && (s.min ?? 0) > lowestGoal;
   // re-render every minute so "Synced · n min ago" stays current
   const [, tick] = useState(0);
   useEffect(() => {
@@ -61,7 +63,7 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
           <div className="row">
             <div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>Daily goal</div>
-              <div className="row-sub">From today on · past days keep theirs</div>
+              <div className="row-sub">Regular day · from today on, past days keep theirs</div>
               {m.status === 'ok' && <div className="row-sub">Maintenance ≈ {fmt(round50(m.kcal))} by your log</div>}
             </div>
             <div className="input-wrap">
@@ -72,6 +74,27 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
                 onChange={v => {
                   setGoalText(v);
                   updateSettings({ goal: Math.max(0, Math.round(+v || 0)) });
+                }}
+                className="num"
+                style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}
+              />
+              <span className="unit">kcal</span>
+            </div>
+          </div>
+
+          <div className="row row-sep">
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>Strength-day goal</div>
+              <div className="row-sub">Days you switch “Strength training” on · empty = the daily goal</div>
+            </div>
+            <div className="input-wrap">
+              <NumInput
+                value={strengthText}
+                ariaLabel="Strength-training day goal in kcal"
+                placeholder="—"
+                onChange={v => {
+                  setStrengthText(v);
+                  updateSettings({ strengthGoal: Math.max(0, Math.round(+v || 0)) });
                 }}
                 className="num"
                 style={{ width: 64, fontSize: 16, fontWeight: 600, textAlign: 'right' }}

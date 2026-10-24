@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from '../components/icons';
 import { Segmented, NumInput } from '../components/ui';
 import { dayLabel, iso, MON, parse, shift } from '../lib/dates';
-import { BODY, bodyInsights, checkInDue, checkIns } from '../lib/body';
+import { BODY, bodyInsights, checkInDue, checkIns, intake } from '../lib/body';
 import type { Insight, Tone } from '../lib/body';
-import { fmt, goalsOn } from '../lib/nutrition';
+import { dayGoals, fmt } from '../lib/nutrition';
+import { weekReview } from '../lib/review';
+import type { ReviewBlock } from '../lib/review';
 import { setWaist, setWeighIn } from '../lib/store';
 import type { Data } from '../lib/types';
 import { KCAL_PER_KG, maintenance, measures, round50, waistTrend, weightTrend } from '../lib/weight';
@@ -201,6 +203,32 @@ function InsightRow({ i }: { i: Insight }) {
   );
 }
 
+/** One block of the review of the last 7 days: what is known, then what is not. */
+function ReviewRow({ b }: { b: ReviewBlock }) {
+  const [glyph, bg] = TONE[b.tone];
+  return (
+    <div className="row" style={{ cursor: 'default', alignItems: 'flex-start', justifyContent: 'flex-start' }}>
+      <span aria-hidden style={{ display: 'inline-grid', placeItems: 'center', width: 22, height: 22, borderRadius: '50%', background: bg, color: '#fff', fontSize: 13, fontWeight: 800, flex: 'none', marginTop: 1 }}>{glyph}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>{b.title}</div>
+        <div style={{ fontSize: 15, fontWeight: 600, marginTop: 1 }}>{b.headline}</div>
+        {b.known.map((t, i) => (
+          <div key={i} style={{ fontSize: 13, color: 'var(--ink-2)', marginTop: 4, textWrap: 'pretty' }}>{t}</div>
+        ))}
+        {b.unknown.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 0.4 }}>Not known</div>
+            {b.unknown.map((t, i) => (
+              <div key={i} style={{ fontSize: 13, color: 'var(--muted)', marginTop: 3, textWrap: 'pretty' }}>{t}</div>
+            ))}
+          </div>
+        )}
+        {b.ref && <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 6 }}>{b.ref}</div>}
+      </div>
+    </div>
+  );
+}
+
 type Range = '12w' | 'all';
 
 export function Body({ data, today, onSaved }: Props) {
@@ -214,8 +242,11 @@ export function Body({ data, today, onSaved }: Props) {
   const trend = weightTrend(data, today);
   const wTrend = waistTrend(data, today);
   const m = maintenance(data, today);
-  const goal = goalsOn(data.settings, today).goal;
-  const insights = bodyInsights(data, today);
+  // the goal for the weekly-loss line: the average goal of the last two weeks (strength days have their own), or today's
+  const goal = intake(data, shift(today, -14), today).goal || dayGoals(data, today).goal;
+  const review = weekReview(data, today);
+  // protein and the gaps in the log are covered by the review of the last 7 days
+  const insights = bodyInsights(data, today).filter(i => i.key !== 'protein' && i.key !== 'gaps');
   const from = range === 'all' ? '0000-01-01' : shift(today, -84);
   const lastW = weights[weights.length - 1];
   const lastC = waists[waists.length - 1];
@@ -264,9 +295,22 @@ export function Body({ data, today, onSaved }: Props) {
           </div>
         )}
 
+        <section style={{ marginTop: 26 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '0 4px 10px', gap: 8 }}>
+            <span className="label" style={{ padding: 0 }}>Last 7 days</span>
+            <span style={{ fontSize: 12, color: 'var(--muted)', textAlign: 'right' }}>{review.summary}</span>
+          </div>
+          <div className="card">
+            {review.blocks.map(b => <ReviewRow key={b.key} b={b} />)}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--faint)', padding: '8px 6px 0', textWrap: 'pretty' }}>
+            {`${shortDate(review.from)} – ${shortDate(shift(review.to, -1))}. Today isn’t counted until it’s over. Readings of food and weight are hints from your own log, not a diagnosis.`}
+          </div>
+        </section>
+
         {insights.length > 0 && (
           <section style={{ marginTop: 26 }}>
-            <div className="label" style={{ padding: '0 4px 10px' }}>What’s behind it</div>
+            <div className="label" style={{ padding: '0 4px 10px' }}>Longer view</div>
             <div className="card">
               {insights.map(i => <InsightRow key={i.key} i={i} />)}
             </div>

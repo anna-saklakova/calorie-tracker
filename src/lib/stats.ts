@@ -1,5 +1,5 @@
 import { shift } from './dates';
-import { dayTotals, goalsOn, kcalBound, kcalZone, proteinGoal, proteinStatus } from './nutrition';
+import { dayGoals, dayTotals, kcalBound, kcalZone, proteinGoal, proteinStatus } from './nutrition';
 import type { BalanceTag, KcalZone, ProteinStatus } from './nutrition';
 import type { Data } from './types';
 
@@ -14,7 +14,7 @@ export function weekStats(data: Data, weekStart: string, today: string) {
   const past = Array.from({ length: 7 }, (_, i) => shift(weekStart, i)).filter(d => d < today);
   const days = past
     .map(d => {
-      const goals = goalsOn(data.settings, d);
+      const goals = dayGoals(data, d);
       return { d, t: dayTotals(data.days[d]), goals, pg: proteinGoal(goals) };
     })
     .filter(x => x.t.kcal > 0);
