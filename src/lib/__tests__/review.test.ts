@@ -31,6 +31,12 @@ describe('goals on strength days', () => {
     expect(dayGoals({ ...data, settings: { ...data.settings, strengthGoal: 0 } }, '2026-10-20').goal).toBe(2000);
   });
 
+  it('lets a past day be marked by hand: it takes the current workout-day goal', () => {
+    const data = withDays({ '2026-10-10': day(2400, { strength: true }) }, { goal: 2000, strengthGoal: 2400, goalHistory: [{ from: '0000-01-01', goal: 2000, macroMode: 'pct', macroGoal: { p: 30, f: 30, c: 40 } }, { from: '2026-10-15', goal: 2000, strengthGoal: 2400, macroMode: 'pct', macroGoal: { p: 30, f: 30, c: 40 } }] });
+    expect(dayGoals(data, '2026-10-10').goal).toBe(2400);
+    expect(dayGoals({ ...data, days: { '2026-10-10': day(2400) } }, '2026-10-10').goal).toBe(2000);
+  });
+
   it('judges a week by each day’s own goal', () => {
     const data = withDays({ '2026-10-19': day(2400, { strength: true }), '2026-10-20': day(2000) }, settings);
     expect(weekStats(data, '2026-10-19', TODAY)).toMatchObject({ kcalGreen: 2, budget: 4400 });
@@ -78,6 +84,6 @@ describe('review of the last 7 days', () => {
     expect(weekReview(withDays(days), TODAY).blocks.map(b => b.key)).toContain('training');
     expect(weekReview(withDays({ '2026-10-19': day(2000) }), TODAY).blocks.map(b => b.key)).not.toContain('training');
     const r = weekReview(withDays(days, { strengthGoal: 2400 }), TODAY);
-    expect(block(r, 'training').known[0]).toMatch(/On strength days you averaged 2 400 kcal, on the other days 2 000/);
+    expect(block(r, 'training').known[0]).toMatch(/On workout days you averaged 2 400 kcal, on the other days 2 000/);
   });
 });

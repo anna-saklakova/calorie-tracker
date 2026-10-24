@@ -2,7 +2,7 @@ import { useRef } from 'react';
 import { ChevronLeft, ChevronRight, SettingsIcon } from '../components/icons';
 import { DateStrip, Switch } from '../components/ui';
 import { dayLabel, shift } from '../lib/dates';
-import { amountLabel, dayGoals, dayTotals, fmt, goalsOn, kcalParts, mealLabels, PACE_LABEL, proteinGoal, proteinPace } from '../lib/nutrition';
+import { amountLabel, dayGoals, dayTotals, fmt, kcalParts, mealLabels, PACE_LABEL, proteinGoal, proteinPace } from '../lib/nutrition';
 import type { PaceStatus, ProteinGoal } from '../lib/nutrition';
 import { setStrength } from '../lib/store';
 import type { Data, Item, Meal } from '../lib/types';
@@ -99,9 +99,9 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
   const meals = day?.meals ?? [];
   const tot = dayTotals(day);
   const hasGoal = s.goal > 0;
-  // the switch is there once a strength-day goal exists for this date (or the day is already marked)
+  // the switch is there once a workout-day goal exists (on any date, so a past day can be fixed by hand)
   const strengthOn = !!day?.strength;
-  const strengthGoal = goalsOn(data.settings, date).strengthGoal ?? 0;
+  const strengthGoal = data.settings.strengthGoal ?? 0;
   // over the goal the ring stands for everything eaten: green up to the goal, the rest in the over colour
   const parts = kcalParts(tot.kcal, s.goal);
   const ringScale = Math.max(tot.kcal, s.goal, 1);
@@ -185,10 +185,7 @@ export function Today({ data, date, today, datePick, setDate, toggleDatePick, op
         {(strengthGoal > 0 || strengthOn) && (
           <div className="card" style={{ marginTop: 14, padding: '2px 14px' }}>
             <Switch on={strengthOn} onToggle={() => setStrength(date, !strengthOn)}>
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: 'block', fontSize: 15, fontWeight: 600 }}>Strength training</span>
-                <span className="row-sub" style={{ display: 'block' }}>{strengthGoal > 0 ? `Goal ${fmt(strengthGoal)} kcal on a training day, ${fmt(goalsOn(data.settings, date).goal)} otherwise` : 'No strength-day goal in force on this date'}</span>
-              </span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>Workout day</span>
             </Switch>
           </div>
         )}
