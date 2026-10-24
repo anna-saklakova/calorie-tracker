@@ -307,7 +307,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
                   </span>
                 ))}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>Dark = strength training day</div>
+              <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>Dark = workout day</div>
             </>
           )}
           {showKcal && (

@@ -157,8 +157,9 @@ export const TAG_LABEL: Record<BalanceTag, string> = { none: '—', on: 'On trac
 // ── Goals by date and day status ────────────────────────────
 
 /**
- * The goals that applied on `date`: the latest snapshot starting on or before it. On a strength-training
- * day (`strength`) the calorie goal is the strength-day goal, when that snapshot has one.
+ * The goals that applied on `date`: the latest snapshot starting on or before it. On a workout day
+ * (`strength`) the calorie goal is the workout-day goal: that snapshot's, or the current one for a day
+ * that predates it.
  */
 export function goalsOn(s: Settings, date: string, strength = false): Goals {
   const base = (() => {
@@ -167,7 +168,9 @@ export function goalsOn(s: Settings, date: string, strength = false): Goals {
     // before the first snapshot (shouldn't happen: the first starts at 0000-01-01), use the oldest goals
     return h.filter(x => x.from <= date).pop() ?? h[0];
   })();
-  return strength && (base.strengthGoal ?? 0) > 0 ? { ...base, goal: base.strengthGoal! } : base;
+  // a past day marked by hand may predate the strength-day goal: it takes the current one
+  const strengthGoal = (base.strengthGoal ?? 0) > 0 ? base.strengthGoal! : (s.strengthGoal ?? 0);
+  return strength && strengthGoal > 0 ? { ...base, goal: strengthGoal } : base;
 }
 
 /** The goals of a day as the log has it: the strength-day goal when the day is marked as one. */

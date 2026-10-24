@@ -84,13 +84,13 @@ export function Settings({ data, sync, onBack, onPassword, onSignOut, onExport }
 
           <div className="row row-sep">
             <div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>Strength-day goal</div>
-              <div className="row-sub">Days you switch “Strength training” on · empty = the daily goal</div>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>Workout-day goal</div>
+              <div className="row-sub">Days you switch “Workout day” on · empty = the daily goal</div>
             </div>
             <div className="input-wrap">
               <NumInput
                 value={strengthText}
-                ariaLabel="Strength-training day goal in kcal"
+                ariaLabel="Workout day goal in kcal"
                 placeholder="—"
                 onChange={v => {
                   setStrengthText(v);

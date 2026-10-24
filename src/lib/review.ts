@@ -75,7 +75,7 @@ export function weekReview(data: Data, today: string): Review {
       const goal = avg(withGoal.map(x => x.goals.goal));
       const off = Math.round((Math.abs(eaten - goal) / goal) * 100);
       const nStrength = withGoal.filter(x => x.strength).length;
-      known.push(`The goals of those days averaged ${fmt(goal)} kcal${nStrength ? `, with ${plural(nStrength, 'strength day')} at their own goal` : ''}; you ate ${off === 0 ? 'on' : `${off} % ${eaten > goal ? 'above' : 'below'}`} it.`);
+      known.push(`The goals of those days averaged ${fmt(goal)} kcal${nStrength ? `, with ${plural(nStrength, 'workout day')} at their own goal` : ''}; you ate ${off === 0 ? 'on' : `${off} % ${eaten > goal ? 'above' : 'below'}`} it.`);
       const zones = withGoal.map(x => kcalZone(x.t.kcal, x.goals.goal));
       const stat = {
         kcalGreen: zones.filter(z => z === 'ideal').length,
@@ -128,17 +128,17 @@ export function weekReview(data: Data, today: string): Review {
     const s = logged.filter(x => x.strength);
     const r = logged.filter(x => !x.strength);
     if (nStrength === 0) {
-      unknown.push('Whether you trained: no day is marked as a strength day. Days you trained and didn’t switch it on were judged against the regular goal.');
+      unknown.push('Whether you trained: no day is marked as a workout day. Days you trained and didn’t switch it on were judged against the regular goal.');
     } else {
       if (s.length && r.length) {
         const eatenDiff = avg(s.map(x => x.t.kcal)) - avg(r.map(x => x.t.kcal));
         const goalDiff = avg(s.map(x => x.goals.goal)) - avg(r.map(x => x.goals.goal));
-        known.push(`On strength days you averaged ${fmt(avg(s.map(x => x.t.kcal)))} kcal, on the other days ${fmt(avg(r.map(x => x.t.kcal)))}: ${signed(eatenDiff, 0)} kcal${goalDiff ? `, against ${signed(goalDiff, 0)} kcal in the goals` : ''}.`);
-      } else if (s.length) known.push(`On strength days you averaged ${fmt(avg(s.map(x => x.t.kcal)))} kcal.`);
-      else known.push('No food is logged on the strength days.');
+        known.push(`On workout days you averaged ${fmt(avg(s.map(x => x.t.kcal)))} kcal, on the other days ${fmt(avg(r.map(x => x.t.kcal)))}: ${signed(eatenDiff, 0)} kcal${goalDiff ? `, against ${signed(goalDiff, 0)} kcal in the goals` : ''}.`);
+      } else if (s.length) known.push(`On workout days you averaged ${fmt(avg(s.map(x => x.t.kcal)))} kcal.`);
+      else known.push('No food is logged on the workout days.');
       unknown.push('The training itself (exercises, load, effort) isn’t recorded, so whether the extra food matched the extra work can’t be judged.');
     }
-    blocks.push({ key: 'training', title: 'Strength days', tone: 'info', headline: nStrength ? `${plural(nStrength, 'strength day')} of ${REVIEW_DAYS}` : 'No strength day marked', known, unknown });
+    blocks.push({ key: 'training', title: 'Workout days', tone: 'info', headline: nStrength ? `${plural(nStrength, 'workout day')} of ${REVIEW_DAYS}` : 'No workout day marked', known, unknown });
   }
 
   // ── weight ──────────────────────────────────────────────────
@@ -197,7 +197,7 @@ export function weekReview(data: Data, today: string): Review {
     blocks.push({ key: 'waist', title: 'Waist', tone: 'info', headline: `${b.value.toFixed(1)} cm on ${date(b.date)}`, known, unknown, ref: 'Ashwell 2012' });
   }
 
-  const marked = rows.some(x => x.strength) ? `${plural(nStrength, 'strength day')} · ` : '';
+  const marked = rows.some(x => x.strength) ? `${plural(nStrength, 'workout day')} · ` : '';
   const weighed = weights.filter(x => x.date >= from).length;
   return { from, to: today, logged: logged.length, summary: `${logged.length} of ${REVIEW_DAYS} days logged · ${marked}${plural(weighed, 'weigh-in')}`, blocks };
 }
