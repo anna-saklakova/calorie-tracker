@@ -35,6 +35,8 @@ export interface Day {
   weight?: number;
   /** the waist measured on this day, cm; missing = none */
   waist?: number;
+  /** a strength-training day: judged against the strength-day goal; missing = a regular day */
+  strength?: boolean;
   updatedAt: number;
 }
 
@@ -57,6 +59,8 @@ export type MacroMode = 'pct' | 'g';
 export interface Goals {
   /** 0 = no goal */
   goal: number;
+  /** the calorie goal of a strength-training day; 0 or missing = the same goal as any day */
+  strengthGoal?: number;
   /** the least to eat on a full day; 0 or missing = none */
   min?: number;
   macroMode: MacroMode;

@@ -1,4 +1,4 @@
-import type { Day, Goals, Item, Macros, Meal, MealType, Settings } from './types';
+import type { Data, Day, Goals, Item, Macros, Meal, MealType, Settings } from './types';
 
 /** Thin-space thousands separator, as in the design ("1 293"). */
 export const fmt = (n: number) => Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
@@ -156,17 +156,26 @@ export const TAG_LABEL: Record<BalanceTag, string> = { none: '—', on: 'On trac
 
 // ── Goals by date and day status ────────────────────────────
 
-/** The goals that applied on `date`: the latest snapshot starting on or before it. */
-export function goalsOn(s: Settings, date: string): Goals {
-  if (!s.goalHistory?.length) return s;
-  const h = [...s.goalHistory].sort((a, b) => a.from.localeCompare(b.from));
-  // before the first snapshot (shouldn't happen: the first starts at 0000-01-01), use the oldest goals
-  return h.filter(x => x.from <= date).pop() ?? h[0];
+/**
+ * The goals that applied on `date`: the latest snapshot starting on or before it. On a strength-training
+ * day (`strength`) the calorie goal is the strength-day goal, when that snapshot has one.
+ */
+export function goalsOn(s: Settings, date: string, strength = false): Goals {
+  const base = (() => {
+    if (!s.goalHistory?.length) return s;
+    const h = [...s.goalHistory].sort((a, b) => a.from.localeCompare(b.from));
+    // before the first snapshot (shouldn't happen: the first starts at 0000-01-01), use the oldest goals
+    return h.filter(x => x.from <= date).pop() ?? h[0];
+  })();
+  return strength && (base.strengthGoal ?? 0) > 0 ? { ...base, goal: base.strengthGoal! } : base;
 }
+
+/** The goals of a day as the log has it: the strength-day goal when the day is marked as one. */
+export const dayGoals = (data: Data, date: string): Goals => goalsOn(data.settings, date, !!data.days[date]?.strength);
 
 export type KcalStatus = 'none' | 'under' | 'within' | 'over' | 'way_over';
 /**
- * Up to 3 % over the goal, 3–7 % over, or more than 7 % over (the bands of kcalZone). A finished
+ * Up to 5 % over the goal, 5–10 % over, or more than 10 % over (the bands of kcalZone). A finished
  * day (`dayDone`) that stayed below the minimum is 'under'; a day still in progress is never judged as under.
  */
 export function kcalStatus(kcal: number, goal: number, min = 0, dayDone = true): KcalStatus {
@@ -178,15 +187,15 @@ export function kcalStatus(kcal: number, goal: number, min = 0, dayDone = true):
 }
 export const KCAL_COLOR: Record<KcalStatus, string> = { none: '#F3E6DF', under: 'var(--est)', within: 'var(--accent)', over: 'var(--est)', way_over: 'var(--danger)' };
 
-/** How far a day may stray from the calorie goal: within ±3 % it's reached, within ±7 % almost, beyond that not reached. */
-export const KCAL_ZONE = { ideal: 0.03, ok: 0.07 } as const;
-/** The goal moved by a share, rounded to whole kcal: kcalBound(1900, 0.03) = 1957, kcalBound(1900, -0.03) = 1843. */
+/** How far a day may stray from the calorie goal: within ±5 % it's reached, within ±10 % almost, beyond that not reached. */
+export const KCAL_ZONE = { ideal: 0.05, ok: 0.1 } as const;
+/** The goal moved by a share, rounded to whole kcal: kcalBound(1900, 0.05) = 1995, kcalBound(1900, -0.05) = 1805. */
 export const kcalBound = (goal: number, share: number) => Math.round(goal * (1 + share));
 
 export type KcalZone = 'none' | 'ideal' | 'low' | 'high' | 'too_low' | 'too_high';
 /**
- * A day's calories against its goal: reached within 97–103 % (green), almost at 93–97 % or 103–107 %
- * (yellow), not reached below 93 % or above 107 % (red).
+ * A day's calories against its goal: reached within 95–105 % (green), almost at 90–95 % or 105–110 %
+ * (yellow), not reached below 90 % or above 110 % (red).
  */
 export function kcalZone(kcal: number, goal: number): KcalZone {
   if (kcal <= 0 || goal <= 0) return 'none';
@@ -199,7 +208,7 @@ export function kcalZone(kcal: number, goal: number): KcalZone {
 
 /**
  * Calories split for drawing: the part up to the goal is always green; only the part over it
- * takes the over colour (green up to 3 % over, yellow up to 7 %, red beyond). Without a goal it's all `within`.
+ * takes the over colour (green up to 5 % over, yellow up to 10 %, red beyond). Without a goal it's all `within`.
  */
 export function kcalParts(kcal: number, goal: number): { within: number; over: number; overColor: string } {
   const status = kcalStatus(kcal, goal);

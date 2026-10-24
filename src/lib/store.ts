@@ -126,6 +126,16 @@ export function setWeighIn(date: string, kg: number) {
   );
 }
 
+/** Marks `date` as a strength-training day, or back as a regular one: its calorie goal follows. */
+export function setStrength(date: string, on: boolean) {
+  update(d =>
+    touchDay(d, date, day => {
+      const { strength: _old, ...rest } = day;
+      return on ? { ...rest, strength: true } : rest;
+    })
+  );
+}
+
 /** Records the waist measured on `date` in cm; 0 removes it. */
 export function setWaist(date: string, cm: number) {
   update(d =>
@@ -148,7 +158,7 @@ export function deleteProduct(id: string) {
   update(d => ({ ...d, library: d.library.map(x => (x.id === id ? { ...x, deleted: true, updatedAt: Date.now() } : x)) }));
 }
 
-const pickGoals = (s: Goals): Goals => ({ goal: s.goal, min: s.min ?? 0, macroMode: s.macroMode, macroGoal: { ...s.macroGoal }, proteinMet: s.proteinMet, proteinClose: s.proteinClose });
+const pickGoals = (s: Goals): Goals => ({ goal: s.goal, strengthGoal: s.strengthGoal ?? 0, min: s.min ?? 0, macroMode: s.macroMode, macroGoal: { ...s.macroGoal }, proteinMet: s.proteinMet, proteinClose: s.proteinClose });
 
 /**
  * Applies a settings change. A change to the goals is recorded as starting today,
@@ -157,7 +167,7 @@ const pickGoals = (s: Goals): Goals => ({ goal: s.goal, min: s.min ?? 0, macroMo
 export function updateSettings(patch: Partial<Settings>, today = todayIso()) {
   update(d => {
     const next: Settings = { ...d.settings, ...patch, updatedAt: Date.now() };
-    if ('goal' in patch || 'min' in patch || 'macroMode' in patch || 'macroGoal' in patch || 'proteinMet' in patch || 'proteinClose' in patch) {
+    if ('goal' in patch || 'strengthGoal' in patch || 'min' in patch || 'macroMode' in patch || 'macroGoal' in patch || 'proteinMet' in patch || 'proteinClose' in patch) {
       // first change ever: the goals so far covered every earlier day
       const history = d.settings.goalHistory?.length ? d.settings.goalHistory : [{ from: '0000-01-01', ...pickGoals(d.settings) }];
       next.goalHistory = [...history.filter(h => h.from < today), { from: today, ...pickGoals(next) }];

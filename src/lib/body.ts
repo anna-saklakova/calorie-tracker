@@ -1,5 +1,5 @@
 import { parse, shift } from './dates';
-import { dayTotals, fmt, goalsOn, proteinGoal, proteinStatus } from './nutrition';
+import { dayGoals, dayTotals, fmt, proteinGoal, proteinStatus } from './nutrition';
 import type { Data } from './types';
 import { KCAL_PER_KG, maintenance, measures, round50, WEIGH_EVERY, weighIns, weightTrend } from './weight';
 
@@ -61,7 +61,7 @@ export function intake(data: Data, from: string, to: string): Intake {
   const all = Array.from({ length: Math.max(0, dayNo(to) - dayNo(from)) }, (_, i) => shift(from, i));
   const rows = all
     .map(d => {
-      const goals = goalsOn(data.settings, d);
+      const goals = dayGoals(data, d);
       return { d, t: dayTotals(data.days[d]), g: goals.goal, pg: proteinGoal(goals) };
     })
     .filter(x => x.t.kcal > 0);

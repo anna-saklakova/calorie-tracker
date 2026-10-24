@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight } from '../components/icons';
 import { MacroCards } from '../components/ui';
 import type { MacroCardData } from '../components/ui';
 import { parse, shift, WD, weekLabel } from '../lib/dates';
-import { balanceTag, dayTotals, fmt, goalsOn, KCAL_COLOR, kcalParts, kcalStatus, kcalZone, MACRO_KEYS, macroPct, macroTargets, proteinGoal, proteinStatus, TAG_LABEL } from '../lib/nutrition';
+import { balanceTag, dayTotals, fmt, dayGoals, KCAL_COLOR, kcalParts, kcalStatus, kcalZone, MACRO_KEYS, macroPct, macroTargets, proteinGoal, proteinStatus, TAG_LABEL } from '../lib/nutrition';
 import type { BalanceTag, KcalZone, MacroKey, ProteinStatus } from '../lib/nutrition';
 import { kcalWeekTag, proteinWeekTag, weekStats } from '../lib/stats';
 import type { WeekStats } from '../lib/stats';
@@ -69,11 +69,11 @@ const PROTEIN_MARK: Record<Exclude<ProteinStatus, 'none'>, MarkDef> = {
   short: ['✕', 'var(--danger)', 'protein not reached']
 };
 const KCAL_MARK: Record<Exclude<KcalZone, 'none'>, MarkDef> = {
-  ideal: ['✓', 'var(--accent)', 'calorie goal reached, within 3 %'],
-  low: ['↓', 'var(--est)', 'calories 3–7 % under the goal'],
-  high: ['↑', 'var(--est)', 'calories 3–7 % over the goal'],
-  too_low: ['↓', 'var(--danger)', 'calories more than 7 % under the goal'],
-  too_high: ['↑', 'var(--danger)', 'calories more than 7 % over the goal']
+  ideal: ['✓', 'var(--accent)', 'calorie goal reached, within 5 %'],
+  low: ['↓', 'var(--est)', 'calories 5–10 % under the goal'],
+  high: ['↑', 'var(--est)', 'calories 5–10 % over the goal'],
+  too_low: ['↓', 'var(--danger)', 'calories more than 10 % under the goal'],
+  too_high: ['↑', 'var(--danger)', 'calories more than 10 % over the goal']
 };
 const VERDICT_MARK: Record<Exclude<BalanceTag, 'none'>, [string, string]> = { on: ['✓', 'var(--accent)'], ok: ['~', 'var(--est)'], off: ['✕', 'var(--danger)'] };
 
@@ -140,11 +140,11 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
   const days = Array.from({ length: 7 }, (_, i) => shift(weekStart, i));
   // each day is judged against the goals it had; the summary uses the latest day shown
   const totals = days.map(d => {
-    const goals = goalsOn(data.settings, d);
-    return { d, t: dayTotals(data.days[d]), goals, pg: proteinGoal(goals) };
+    const goals = dayGoals(data, d);
+    return { d, t: dayTotals(data.days[d]), goals, pg: proteinGoal(goals), strength: !!data.days[d]?.strength };
   });
   const lastDay = days[6] <= today ? days[6] : today;
-  const s = goalsOn(data.settings, lastDay);
+  const s = dayGoals(data, lastDay);
   const hasGoal = s.goal > 0;
   const min = s.min ?? 0;
   // today isn't over yet, so the averages are of the finished days only
@@ -152,12 +152,21 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
   const todayPending = days.includes(today) && dayTotals(data.days[today]).kcal > 0;
   const avg = (k: 'kcal' | 'p' | 'f' | 'c') => (logged.length ? logged.reduce((a, x) => a + x.t[k], 0) / logged.length : 0);
   const avgM = { p: avg('p'), f: avg('f'), c: avg('c') };
-  const maxK = Math.max(s.goal || 0, ...totals.map(x => x.t.kcal), 1);
-  const goalTop = hasGoal ? Math.round(H * (1 - Math.min(1, s.goal / maxK))) : 0;
+  // strength days have their own goal: the macro targets use the average goal of the logged days
+  const loggedGoals = logged.filter(x => x.goals.goal > 0);
+  const weekGoal = loggedGoals.length ? Math.round(loggedGoals.reduce((a, x) => a + x.goals.goal, 0) / loggedGoals.length) : s.goal;
+  // days up to today have a goal of their own; later days have none yet (the switch is set on the day itself)
+  const goalOf = (x: (typeof totals)[number]) => (x.d <= today ? x.goals.goal : 0);
+  const distinctGoals = [...new Set(totals.filter(x => x.d <= today && x.goals.goal > 0).map(x => x.goals.goal))].sort((a, b) => a - b);
+  const mixedGoals = distinctGoals.length > 1;
+  const showGoalRow = totals.some(x => x.d <= today && (x.strength || (x.goals.strengthGoal ?? 0) > 0));
+  const maxK = Math.max(s.goal || 0, ...distinctGoals, ...totals.map(x => x.t.kcal), 1);
+  const goalTopOf = (g: number) => Math.round(H * (1 - Math.min(1, g / maxK)));
+  const goalTop = hasGoal ? goalTopOf(s.goal) : 0;
   const minTop = min > 0 ? Math.round(H * (1 - Math.min(1, min / maxK))) : 0;
   const isCurrent = weekStart >= currentWeekStart;
 
-  const targets = macroTargets(s);
+  const targets = macroTargets({ ...s, goal: weekGoal });
   const actual = macroPct(avgM);
   const now = weekStats(data, weekStart, today);
   const prev = weekStats(data, shift(weekStart, -7), today);
@@ -227,11 +236,20 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
           {/* the lines' key sits above the chart, so it never meets the numbers over the bars */}
           {(hasGoal || min > 0) && (
             <div style={{ position: 'absolute', left: 16, top: 14, display: 'flex', gap: 14, fontSize: 11, color: 'var(--faint)' }}>
-              {hasGoal && <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, borderTop: '1px dashed var(--dash)' }} />goal {fmt(s.goal)}</span>}
+              {hasGoal && <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, borderTop: '1px dashed var(--dash)' }} />goal {mixedGoals ? distinctGoals.map(fmt).join(' / ') : fmt(s.goal)}</span>}
               {min > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, borderTop: '2px dotted var(--dash)' }} />min {fmt(min)}</span>}
             </div>
           )}
-          {hasGoal && <div style={{ position: 'absolute', left: 16, right: 16, top: CHART_TOP + 40 + goalTop, borderTop: '1px dashed var(--dash)' }} />}
+          {hasGoal && !mixedGoals && <div style={{ position: 'absolute', left: 16, right: 16, top: CHART_TOP + 40 + goalTop, borderTop: '1px dashed var(--dash)' }} />}
+          {mixedGoals && (
+            <div aria-hidden style={{ position: 'absolute', left: 16, right: 16, top: CHART_TOP + 40, height: H, display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, pointerEvents: 'none' }}>
+              {totals.map(x => (
+                <span key={x.d} style={{ position: 'relative' }}>
+                  {goalOf(x) > 0 && <span style={{ position: 'absolute', left: -4, right: -4, top: goalTopOf(goalOf(x)), borderTop: '1px dashed var(--dash)' }} />}
+                </span>
+              ))}
+            </div>
+          )}
           {min > 0 && <div style={{ position: 'absolute', left: 16, right: 16, top: CHART_TOP + 40 + minTop, borderTop: '2px dotted var(--dash)' }} />}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, alignItems: 'end', height: 160 }}>
             {totals.map(x => {
@@ -272,13 +290,33 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
               </span>
             ))}
           </div>
+          {showGoalRow && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', marginTop: 10, borderTop: '1px solid var(--line-soft)', paddingTop: 8 }}>Goal of the day</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, marginTop: 6 }}>
+                {totals.map(x => (
+                  <span
+                    key={x.d}
+                    role={goalOf(x) > 0 ? 'img' : undefined}
+                    aria-label={goalOf(x) > 0 ? `${WD[parse(x.d).getDay()]}: goal ${fmt(x.goals.goal)} kcal${x.strength ? ', strength training' : ''}` : undefined}
+                    style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 22, color: 'var(--faint)', fontSize: 14 }}
+                  >
+                    {goalOf(x) > 0 ? (
+                      <span className="num" style={{ fontSize: 10, fontWeight: 700, padding: '3px 4px', borderRadius: 8, whiteSpace: 'nowrap', background: x.strength ? 'var(--ink)' : 'transparent', color: x.strength ? '#fff' : 'var(--muted)' }}>{fmt(x.goals.goal)}</span>
+                    ) : '·'}
+                  </span>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>Dark = strength training day</div>
+            </>
+          )}
           {showKcal && (
             <MarkRow
               title="Calories"
               mark={KCAL_MARK}
               days={totals.map(x => {
                 const raw = x.d <= today ? kcalZone(x.t.kcal, x.goals.goal) : 'none';
-                // today isn't over: only a day already more than 7 % over is settled
+                // today isn't over: only a day already more than 10 % over is settled
                 return { d: x.d, st: x.d === today && raw !== 'too_high' ? 'none' : raw, note: `${fmt(x.t.kcal)} of ${fmt(x.goals.goal)} kcal` };
               })}
             />
@@ -295,7 +333,7 @@ export function Week({ data, weekStart, currentWeekStart, today, setWeekStart, o
             />
           )}
         </div>
-        {now.days > 0 && prev.days > 0 && <Compare now={now} prev={prev} goal={s.goal} isCurrent={isCurrent} />}
+        {now.days > 0 && prev.days > 0 && <Compare now={now} prev={prev} goal={weekGoal} isCurrent={isCurrent} />}
       </div>
     </div>
   );
